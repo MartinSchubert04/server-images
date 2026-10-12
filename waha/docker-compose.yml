@@ -1,0 +1,26 @@
+name: waha
+
+services:
+  waha:
+    image: devlikeapro/waha
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      - WAHA_DASHBOARD_ENABLED=true
+      - WAHA_API_KEY=${WAHA_API_KEY}
+      - WAHA_DASHBOARD_USERNAME=${WAHA_DASHBOARD_USERNAME}
+      - WAHA_DASHBOARD_PASSWORD=${WAHA_DASHBOARD_PASSWORD}
+      - WHATSAPP_SWAGGER_USERNAME=${WHATSAPP_SWAGGER_USERNAME}
+      - WHATSAPP_SWAGGER_PASSWORD=${WHATSAPP_SWAGGER_PASSWORD}
+    volumes:
+      - waha_sessions:/app/.sessions
+    networks:
+      - n8n_net
+
+volumes:
+  waha_sessions:
+
+networks:
+  n8n_net:
+    external: true

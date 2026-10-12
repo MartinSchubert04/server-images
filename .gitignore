@@ -1,0 +1,28 @@
+# Secrets
+.env
+*.pem
+*.key
+.jwt_secret
+
+# Logs
+*.log
+
+# Databases and runtime state
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# AdGuard: config holds the admin password hash, work is runtime data
+adguard/conf/
+adguard/work/
+
+# Mosquitto
+home-assistant/mosquitto/data/
+
+# Frigate: keep only config.yaml
+home-assistant/frigate/config/*
+!home-assistant/frigate/config/config.yaml
+home-assistant/frigate/media/

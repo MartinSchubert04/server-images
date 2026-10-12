@@ -1,0 +1,103 @@
+# Loads default set of integrations. Do not remove.
+default_config:
+# Load frontend themes from the themes folder
+frontend:
+  themes: !include_dir_merge_named themes
+  # card-mod has to load before the dashboards for theme-wide styles; athanor.js holds the fonts,
+  # the status line and the hero card of the Athanor themes
+  extra_module_url:
+    - /hacsfiles/lovelace-card-mod/card-mod.js?hacstag=190927524421
+    - /local/athanor/athanor.js?v=5
+automation: !include automations.yaml
+script: !include scripts.yaml
+scene: !include scenes.yaml
+
+homeassistant:
+  packages: !include_dir_named packages
+  allowlist_external_dirs:
+    - /config/www/snapshots
+
+sensor:
+  - platform: folder
+    folder: /config/www/snapshots
+
+shell_command:
+  limpiar_snapshots: "rm -f /config/www/snapshots/captura_*.jpg"
+  apagar_pc: 'ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i /config/.ssh/id_ed25519 martin@192.168.1.33 "shutdown /s /t 0"'
+  wake_pc: 'ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i /config/.ssh/id_ed25519 tincho@192.168.1.100 "powershell wake_on_lan.ps1"'
+
+http:
+  use_x_forwarded_for: true
+  trusted_proxies:
+    - 172.21.0.0/16
+
+rest:
+  - resource: http://frigate:5000/api/stats
+    scan_interval: 30
+    sensor:
+      - name: "GPU Uso Frigate"
+        value_template: "{{ value_json.gpu_usages['NVIDIA GeForce RTX 2060 SUPER'].gpu | replace('%','') }}"
+        unit_of_measurement: "%"
+
+  - resource: http://host.docker.internal:8085/data.json
+    scan_interval: 30
+    sensor:
+      - name: "CPU Temperatura"
+        value_template: >-
+          {{ value_json['Children'][0]['Children'][1]['Children'][3]['Children'][8]['Value']
+             | replace(',', '.') | replace(' °C', '') | float(0) }}
+        unit_of_measurement: "°C"
+        device_class: temperature
+
+      - name: "CPU Uso Porcentaje"
+        value_template: >-
+          {{ value_json['Children'][0]['Children'][1]['Children'][4]['Children'][0]['Value']
+             | replace(',', '.') | replace(' %', '') | float(0) }}
+        unit_of_measurement: "%"
+
+      - name: "GPU Temperatura"
+        value_template: >-
+          {{ value_json['Children'][0]['Children'][6]['Children'][3]['Children'][0]['Value']
+             | replace(',', '.') | replace(' °C', '') | float(0) }}
+        unit_of_measurement: "°C"
+        device_class: temperature
+
+      - name: "Disco Espacio Libre"
+        value_template: >-
+          {{ value_json['Children'][0]['Children'][7]['Children'][4]['Children'][2]['Value']
+             | replace(',', '.') | replace(' GB', '') | float(0) }}
+        unit_of_measurement: "GB"
+        device_class: data_size
+
+      - name: "Disco Espacio Total"
+        value_template: >-
+          {{ value_json['Children'][0]['Children'][7]['Children'][4]['Children'][3]['Value']
+             | replace(',', '.') | replace(' GB', '') | float(0) }}
+        unit_of_measurement: "GB"
+        device_class: data_size
+
+      - name: "Disco Uso Porcentaje"
+        value_template: >-
+          {{ value_json['Children'][0]['Children'][7]['Children'][1]['Children'][0]['Value']
+             | replace(',', '.') | replace(' %', '') | float(0) }}
+        unit_of_measurement: "%"
+
+      - name: "RAM Uso Porcentaje"
+        value_template: >-
+          {{ value_json['Children'][0]['Children'][4]['Children'][0]['Children'][0]['Value']
+             | replace(',', '.') | replace(' %', '') | float(0) }}
+        unit_of_measurement: "%"
+
+      - name: "RAM Usada"
+        value_template: >-
+          {{ value_json['Children'][0]['Children'][4]['Children'][1]['Children'][0]['Value']
+             | replace(',', '.') | replace(' GB', '') | float(0) }}
+        unit_of_measurement: "GB"
+        device_class: data_size
+
+      - name: "RAM Disponible"
+        value_template: >-
+          {{ value_json['Children'][0]['Children'][4]['Children'][1]['Children'][1]['Value']
+             | replace(',', '.') | replace(' GB', '') | float(0) }}
+        unit_of_measurement: "GB"
+        device_class: data_size

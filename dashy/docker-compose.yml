@@ -1,0 +1,16 @@
+services:
+  dashy:
+    container_name: dashy
+    image: lissy93/dashy:latest
+    volumes:
+      - ./conf.yml:/app/user-data/conf.yml
+    ports:
+      - "4000:8080"
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1G

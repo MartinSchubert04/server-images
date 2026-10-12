@@ -1,0 +1,43 @@
+name: n8n
+
+services:
+  n8n:
+    image: n8nio/n8n
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+    ports:
+      - "5678:5678"
+    environment:
+      - NODE_OPTIONS=--max-old-space-size=4096
+      - EXECUTIONS_DATA_PRUNE=true
+      - EXECUTIONS_DATA_MAX_AGE=24
+      - EXECUTIONS_DATA_PRUNE_MAX_COUNT=100
+      - TZ=${TZ}
+      - GENERIC_TIMEZONE=${GENERIC_TIMEZONE}
+      - N8N_EMAIL_MODE=smtp
+      - N8N_SMTP_HOST=${N8N_SMTP_HOST}
+      - N8N_SMTP_PORT=${N8N_SMTP_PORT}
+      - N8N_SMTP_USER=${N8N_SMTP_USER}
+      - N8N_SMTP_PASS=${N8N_SMTP_PASS}
+      - N8N_SMTP_SSL=${N8N_SMTP_SSL}
+      - N8N_SMTP_SENDER=${N8N_SMTP_SENDER}
+      - N8N_SECURE_COOKIE=false
+      - N8N_HOST=192.168.1.34.nip.io
+      - N8N_PROTOCOL=http
+      - N8N_PORT=5678
+      - N8N_WEBHOOK_URL=http://192.168.1.34.nip.io:5678
+    volumes:
+      - n8n_data:/home/node/.n8n
+    restart: unless-stopped
+    networks:
+      - n8n_net
+
+volumes:
+  n8n_data:
+
+networks:
+  n8n_net:
+    external: true

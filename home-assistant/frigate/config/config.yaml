@@ -1,0 +1,64 @@
+mqtt:
+  enabled: true
+  host: mosquitto
+  port: 1883
+
+detectors:
+  onnx:
+    type: onnx
+    device: GPU
+
+model:
+  path: /config/model_cache/yolox_s.onnx
+  model_type: yolox
+  width: 640
+  height: 640
+  input_tensor: nchw
+  input_dtype: float_denorm
+  labelmap_path: /labelmap/coco-80.txt
+
+cameras:
+  cam_entrada:
+    ffmpeg:
+      inputs:
+        - path: http://192.168.1.39:8080
+          input_args: -fflags +genpts+discardcorrupt -avoid_negative_ts make_zero
+          roles:
+            - detect
+            - record
+    record:
+      enabled: true
+      alerts:
+        retain:
+          days: 7
+          mode: all
+      detections:
+        retain:
+          days: 7
+          mode: all
+    detect:
+      enabled: true
+      width: 640
+      height: 480
+      fps: 5
+    objects:
+      track:
+        - person
+      filters:
+        person:
+          threshold: 0.5
+          min_area: 1500
+
+semantic_search:
+  enabled: false
+
+face_recognition:
+  enabled: false
+
+lpr:
+  enabled: false
+  
+birdseye:
+  enabled: false
+
+version: 0.17-0

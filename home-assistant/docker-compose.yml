@@ -1,0 +1,122 @@
+services:
+  mosquitto:
+    container_name: mosquitto
+    image: eclipse-mosquitto:latest
+    networks:
+      - home
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 100M
+
+  homeassistant:
+    container_name: homeassistant
+    image: "ghcr.io/home-assistant/home-assistant:stable"
+    networks:
+      - home
+    depends_on:
+      hacs-installer:
+        condition: service_completed_successfully
+      ssh-key-init:
+        condition: service_completed_successfully
+    volumes:
+      - homeassistant_data:/config
+      - /etc/localtime:/etc/localtime:ro
+    restart: unless-stopped
+    ports:
+      - "8123:8123"
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1G
+
+  esphome:
+    container_name: esphome
+    image: ghcr.io/esphome/esphome:stable
+    networks:
+      - home
+    volumes:
+      - esphome_data:/config
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "6052:6052"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 1G
+
+  frigate:
+    container_name: frigate
+    image: ghcr.io/blakeblackshear/frigate:stable-tensorrt
+    networks:
+      - home
+    restart: unless-stopped
+    shm_size: "256mb"
+    volumes:
+      - ./frigate/config:/config
+      - ./frigate/media:/media/frigate
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "5000:5000"
+      - "8554:8554"
+      - "8555:8555/tcp"
+      - "8555:8555/udp"
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          memory: 4G
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # ----- Home assistant dependency
+  hacs-installer:
+    container_name: hacs-installer
+    image: alpine:latest
+    networks:
+      - home
+    volumes:
+      - homeassistant_data:/config
+    entrypoint: >
+      sh -c "
+      apk add --no-cache bash curl unzip &&
+      bash -c \"$(curl -fsSL https://get.hacs.xyz)\"
+      "
+    restart: "no"
+
+  ssh-key-init:
+    container_name: ssh-key-init
+    image: alpine:latest
+    networks:
+      - home
+    volumes:
+      - homeassistant_data:/config
+      - ./home-assistant-init/init.sh:/init.sh:ro
+      - ./home-assistant-init/configuration.yaml:/init/configuration.yaml:ro
+      - ./home-assistant-init/packages:/init/packages:ro
+    entrypoint: sh -c "apk add --no-cache openssh-keygen && sh /init.sh"
+    restart: "no"
+
+networks:
+  home:
+    name: home
+    driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: 1200
+
+volumes:
+  esphome_data:
+  homeassistant_data:

@@ -1,0 +1,54 @@
+services:
+  kopia:
+    container_name: kopia
+    image: kopia/kopia:latest
+    hostname: mrtn-server
+    command: >
+      server start --insecure --address=0.0.0.0:51515
+      --server-username=${KOPIA_UI_USER}
+      --server-password=${KOPIA_UI_PASSWORD}
+    environment:
+      - KOPIA_PASSWORD=${KOPIA_PASSWORD}
+      - USER=root
+      - TZ=${TZ}
+    volumes:
+      - kopia_config:/app/config
+      - kopia_cache:/app/cache
+      - kopia_logs:/app/logs
+      # Backup destination: change BACKUP_DEST in .env to move it
+      - ${BACKUP_DEST}:/repository
+      # ----- What gets backed up (read-only)
+      - homeassistant_data:/data/homeassistant:ro
+      - esphome_data:/data/esphome:ro
+      - n8n_data:/data/n8n:ro
+      - waha_sessions:/data/waha:ro
+      - autoapply_auth:/data/autoapply-auth:ro
+      - ..:/data/compose:ro
+    ports:
+      - "51515:51515"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 1G
+
+volumes:
+  kopia_config:
+  kopia_cache:
+  kopia_logs:
+  homeassistant_data:
+    external: true
+    name: home-assistant_homeassistant_data
+  esphome_data:
+    external: true
+    name: home-assistant_esphome_data
+  n8n_data:
+    external: true
+    name: n8n_n8n_data
+  waha_sessions:
+    external: true
+    name: waha_waha_sessions
+  autoapply_auth:
+    external: true
+    name: job-autoapply_auth

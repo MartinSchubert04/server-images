@@ -1,0 +1,25 @@
+services:
+  adguardhome:
+    container_name: adguardhome
+    image: adguard/adguardhome:latest
+    networks:
+      - home
+    volumes:
+      - ./work:/opt/adguardhome/work
+      - ./conf:/opt/adguardhome/conf
+    ports:
+      # Bound to the LAN IP: Windows ICS already holds 0.0.0.0:53
+      - "192.168.1.100:53:53/tcp"
+      - "192.168.1.100:53:53/udp"
+      - "3000:3000"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+networks:
+  # Created by the home-assistant stack; Home Assistant reaches AdGuard as "adguardhome"
+  home:
+    external: true

@@ -1,0 +1,342 @@
+# Consumo eléctrico y costo por equipo: la versión nativa de Projects/consumo-pc.
+#
+# La potencia sale de los enchufes Tuya. La energía se integra acá porque los enchufes no informan
+# su acumulado. El costo usa la tarifa de los dos input_number, que se editan desde el dashboard.
+# Los recursos del server (CPU, GPU, RAM, procesos) se leen de la API local de consumo-pc, que tiene
+# que aceptar el host "host.docker.internal" en su config.json.
+
+input_number:
+  tarifa_precio_kwh:
+    name: "Tarifa: precio por kWh"
+    icon: mdi:cash
+    min: 0
+    max: 100000
+    step: 0.01
+    mode: box
+    unit_of_measurement: "$/kWh"
+  tarifa_impuestos_pct:
+    name: "Tarifa: impuestos"
+    icon: mdi:percent
+    min: 0
+    max: 200
+    step: 0.1
+    mode: box
+    unit_of_measurement: "%"
+
+sensor:
+  - platform: integration
+    name: "Server energia"
+    unique_id: consumo_server_energia
+    source: sensor.bedroom_plug_server_power
+    unit_prefix: k
+    round: 4
+    method: left
+    max_sub_interval:
+      minutes: 5
+  - platform: history_stats
+    name: "Server horas hoy"
+    unique_id: consumo_server_horas_hoy
+    entity_id: binary_sensor.server_encendido
+    state: "on"
+    type: time
+    start: "{{ today_at() }}"
+    end: "{{ now() }}"
+  - platform: integration
+    name: "PC main energia"
+    unique_id: consumo_pc_main_energia
+    source: sensor.bedroom_plug_pc_main_power
+    unit_prefix: k
+    round: 4
+    method: left
+    max_sub_interval:
+      minutes: 5
+  - platform: history_stats
+    name: "PC main horas hoy"
+    unique_id: consumo_pc_main_horas_hoy
+    entity_id: binary_sensor.pc_main_encendido
+    state: "on"
+    type: time
+    start: "{{ today_at() }}"
+    end: "{{ now() }}"
+  - platform: integration
+    name: "AC energia"
+    unique_id: consumo_ac_energia
+    source: sensor.bedroom_plug_ac_power
+    unit_prefix: k
+    round: 4
+    method: left
+    max_sub_interval:
+      minutes: 5
+  - platform: history_stats
+    name: "AC horas hoy"
+    unique_id: consumo_ac_horas_hoy
+    entity_id: binary_sensor.ac_encendido
+    state: "on"
+    type: time
+    start: "{{ today_at() }}"
+    end: "{{ now() }}"
+
+utility_meter:
+  server_energia_hoy:
+    name: "Server energia hoy"
+    unique_id: consumo_server_energia_hoy
+    source: sensor.server_energia
+    cycle: daily
+  server_energia_mes:
+    name: "Server energia mes"
+    unique_id: consumo_server_energia_mes
+    source: sensor.server_energia
+    cycle: monthly
+  pc_main_energia_hoy:
+    name: "PC main energia hoy"
+    unique_id: consumo_pc_main_energia_hoy
+    source: sensor.pc_main_energia
+    cycle: daily
+  pc_main_energia_mes:
+    name: "PC main energia mes"
+    unique_id: consumo_pc_main_energia_mes
+    source: sensor.pc_main_energia
+    cycle: monthly
+  ac_energia_hoy:
+    name: "AC energia hoy"
+    unique_id: consumo_ac_energia_hoy
+    source: sensor.ac_energia
+    cycle: daily
+  ac_energia_mes:
+    name: "AC energia mes"
+    unique_id: consumo_ac_energia_mes
+    source: sensor.ac_energia
+    cycle: monthly
+
+template:
+  - sensor:
+      # Costo de un kWh adicional, impuestos incluidos
+      - name: "Tarifa precio final"
+        unique_id: consumo_tarifa_precio_final
+        unit_of_measurement: "$/kWh"
+        icon: mdi:cash-multiple
+        state: >-
+          {{ (states('input_number.tarifa_precio_kwh') | float(0)
+              * (1 + states('input_number.tarifa_impuestos_pct') | float(0) / 100)) | round(2) }}
+      - name: "Server costo por hora"
+        unique_id: consumo_server_costo_hora
+        unit_of_measurement: "$/h"
+        icon: mdi:cash-clock
+        state: >-
+          {{ (states('sensor.bedroom_plug_server_power') | float(0) / 1000 * states('sensor.tarifa_precio_final') | float(0)) | round(2) }}
+      - name: "Server costo hoy"
+        unique_id: consumo_server_costo_hoy
+        unit_of_measurement: "$"
+        icon: mdi:cash
+        state: >-
+          {{ (states('sensor.server_energia_hoy') | float(0) * states('sensor.tarifa_precio_final') | float(0)) | round(2) }}
+      - name: "Server costo mes"
+        unique_id: consumo_server_costo_mes
+        unit_of_measurement: "$"
+        icon: mdi:cash
+        state: >-
+          {{ (states('sensor.server_energia_mes') | float(0) * states('sensor.tarifa_precio_final') | float(0)) | round(0) }}
+      # Lo del mes más el ritmo de los días realmente medidos, extendido a lo que falta del mes
+      - name: "Server proyeccion mes"
+        unique_id: consumo_server_proyeccion_mes
+        unit_of_measurement: "$"
+        icon: mdi:chart-timeline-variant
+        state: >-
+          {% set kwh = states('sensor.server_energia_mes') | float(0) %}
+          {% set ahora = now() %}
+          {% set inicio_mes = ahora.replace(day=1, hour=0, minute=0, second=0, microsecond=0) %}
+          {% set reinicio = state_attr('sensor.server_energia_mes', 'last_reset') | as_datetime(inicio_mes) | as_local %}
+          {% set desde = [reinicio, inicio_mes] | max %}
+          {% set fin_mes = (inicio_mes + timedelta(days=32)).replace(day=1) %}
+          {% set medidos = (ahora - desde).total_seconds() / 86400 %}
+          {% set restantes = (fin_mes - ahora).total_seconds() / 86400 %}
+          {% set total = kwh + (kwh / medidos * restantes if medidos > 0.04 else 0) %}
+          {{ (total * states('sensor.tarifa_precio_final') | float(0)) | round(0) }}
+      - name: "PC main costo por hora"
+        unique_id: consumo_pc_main_costo_hora
+        unit_of_measurement: "$/h"
+        icon: mdi:cash-clock
+        state: >-
+          {{ (states('sensor.bedroom_plug_pc_main_power') | float(0) / 1000 * states('sensor.tarifa_precio_final') | float(0)) | round(2) }}
+      - name: "PC main costo hoy"
+        unique_id: consumo_pc_main_costo_hoy
+        unit_of_measurement: "$"
+        icon: mdi:cash
+        state: >-
+          {{ (states('sensor.pc_main_energia_hoy') | float(0) * states('sensor.tarifa_precio_final') | float(0)) | round(2) }}
+      - name: "PC main costo mes"
+        unique_id: consumo_pc_main_costo_mes
+        unit_of_measurement: "$"
+        icon: mdi:cash
+        state: >-
+          {{ (states('sensor.pc_main_energia_mes') | float(0) * states('sensor.tarifa_precio_final') | float(0)) | round(0) }}
+      # Lo del mes más el ritmo de los días realmente medidos, extendido a lo que falta del mes
+      - name: "PC main proyeccion mes"
+        unique_id: consumo_pc_main_proyeccion_mes
+        unit_of_measurement: "$"
+        icon: mdi:chart-timeline-variant
+        state: >-
+          {% set kwh = states('sensor.pc_main_energia_mes') | float(0) %}
+          {% set ahora = now() %}
+          {% set inicio_mes = ahora.replace(day=1, hour=0, minute=0, second=0, microsecond=0) %}
+          {% set reinicio = state_attr('sensor.pc_main_energia_mes', 'last_reset') | as_datetime(inicio_mes) | as_local %}
+          {% set desde = [reinicio, inicio_mes] | max %}
+          {% set fin_mes = (inicio_mes + timedelta(days=32)).replace(day=1) %}
+          {% set medidos = (ahora - desde).total_seconds() / 86400 %}
+          {% set restantes = (fin_mes - ahora).total_seconds() / 86400 %}
+          {% set total = kwh + (kwh / medidos * restantes if medidos > 0.04 else 0) %}
+          {{ (total * states('sensor.tarifa_precio_final') | float(0)) | round(0) }}
+      - name: "AC costo por hora"
+        unique_id: consumo_ac_costo_hora
+        unit_of_measurement: "$/h"
+        icon: mdi:cash-clock
+        state: >-
+          {{ (states('sensor.bedroom_plug_ac_power') | float(0) / 1000 * states('sensor.tarifa_precio_final') | float(0)) | round(2) }}
+      - name: "AC costo hoy"
+        unique_id: consumo_ac_costo_hoy
+        unit_of_measurement: "$"
+        icon: mdi:cash
+        state: >-
+          {{ (states('sensor.ac_energia_hoy') | float(0) * states('sensor.tarifa_precio_final') | float(0)) | round(2) }}
+      - name: "AC costo mes"
+        unique_id: consumo_ac_costo_mes
+        unit_of_measurement: "$"
+        icon: mdi:cash
+        state: >-
+          {{ (states('sensor.ac_energia_mes') | float(0) * states('sensor.tarifa_precio_final') | float(0)) | round(0) }}
+      # Lo del mes más el ritmo de los días realmente medidos, extendido a lo que falta del mes
+      - name: "AC proyeccion mes"
+        unique_id: consumo_ac_proyeccion_mes
+        unit_of_measurement: "$"
+        icon: mdi:chart-timeline-variant
+        state: >-
+          {% set kwh = states('sensor.ac_energia_mes') | float(0) %}
+          {% set ahora = now() %}
+          {% set inicio_mes = ahora.replace(day=1, hour=0, minute=0, second=0, microsecond=0) %}
+          {% set reinicio = state_attr('sensor.ac_energia_mes', 'last_reset') | as_datetime(inicio_mes) | as_local %}
+          {% set desde = [reinicio, inicio_mes] | max %}
+          {% set fin_mes = (inicio_mes + timedelta(days=32)).replace(day=1) %}
+          {% set medidos = (ahora - desde).total_seconds() / 86400 %}
+          {% set restantes = (fin_mes - ahora).total_seconds() / 86400 %}
+          {% set total = kwh + (kwh / medidos * restantes if medidos > 0.04 else 0) %}
+          {{ (total * states('sensor.tarifa_precio_final') | float(0)) | round(0) }}
+  - binary_sensor:
+      # Por debajo de 1 W el equipo se cuenta como apagado, igual que en consumo-pc
+      - name: "Server encendido"
+        unique_id: consumo_server_encendido
+        device_class: power
+        state: "{{ states('sensor.bedroom_plug_server_power') | float(0) >= 1 }}"
+      - name: "PC main encendido"
+        unique_id: consumo_pc_main_encendido
+        device_class: power
+        state: "{{ states('sensor.bedroom_plug_pc_main_power') | float(0) >= 1 }}"
+      - name: "AC encendido"
+        unique_id: consumo_ac_encendido
+        device_class: power
+        state: "{{ states('sensor.bedroom_plug_ac_power') | float(0) >= 1 }}"
+
+rest:
+  - resource: http://host.docker.internal:8787/api/live
+    scan_interval: 15
+    timeout: 8
+    sensor:
+      - name: "Server CPU uso"
+        unique_id: consumo_server_cpu_uso
+        unit_of_measurement: "%"
+        state_class: measurement
+        icon: mdi:cpu-64-bit
+        value_template: "{{ value_json.cpu.pct }}"
+      # El uso por núcleo y el modelo van como atributos
+      - name: "Server CPU nucleos"
+        unique_id: consumo_server_cpu_nucleos
+        icon: mdi:chip
+        value_template: "{{ value_json.cpu.nucleos | count }}"
+        json_attributes_path: "$.cpu"
+        json_attributes:
+          - nucleos
+          - nombre
+      - name: "Server CPU potencia"
+        unique_id: consumo_server_cpu_potencia
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        value_template: "{{ value_json.w.cpu }}"
+      - name: "Server GPU potencia"
+        unique_id: consumo_server_gpu_potencia
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        value_template: "{{ value_json.w.gpu }}"
+      - name: "Server resto potencia"
+        unique_id: consumo_server_resto_potencia
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        value_template: "{{ value_json.w.resto }}"
+      - name: "Server GPU uso"
+        unique_id: consumo_server_gpu_uso
+        unit_of_measurement: "%"
+        state_class: measurement
+        icon: mdi:expansion-card
+        value_template: "{{ value_json.gpu.pct }}"
+      - name: "Server GPU temperatura"
+        unique_id: consumo_server_gpu_temperatura
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        value_template: "{{ value_json.gpu.temp }}"
+      - name: "Server VRAM uso"
+        unique_id: consumo_server_vram_uso
+        unit_of_measurement: "%"
+        state_class: measurement
+        icon: mdi:memory
+        value_template: "{{ (value_json.gpu.vram_usado / value_json.gpu.vram_total * 100) | round(1) }}"
+      - name: "Server RAM uso"
+        unique_id: consumo_server_ram_uso
+        unit_of_measurement: "%"
+        state_class: measurement
+        icon: mdi:memory
+        value_template: "{{ (value_json.ram.usado / value_json.ram.total * 100) | round(1) }}"
+      - name: "Server RAM usada"
+        unique_id: consumo_server_ram_usada
+        unit_of_measurement: "GB"
+        state_class: measurement
+        icon: mdi:memory
+        value_template: "{{ (value_json.ram.usado / 1073741824) | round(1) }}"
+      - name: "Server red bajada"
+        unique_id: consumo_server_red_bajada
+        unit_of_measurement: "kB/s"
+        device_class: data_rate
+        state_class: measurement
+        icon: mdi:download
+        value_template: "{{ (value_json.red.rx / 1000) | round(1) }}"
+      - name: "Server red subida"
+        unique_id: consumo_server_red_subida
+        unit_of_measurement: "kB/s"
+        device_class: data_rate
+        state_class: measurement
+        icon: mdi:upload
+        value_template: "{{ (value_json.red.tx / 1000) | round(1) }}"
+      - name: "Server disco C uso"
+        unique_id: consumo_server_disco_c_uso
+        unit_of_measurement: "%"
+        state_class: measurement
+        icon: mdi:harddisk
+        value_template: >-
+          {% set d = value_json.discos | selectattr('letra', 'eq', 'C') | first %}
+          {{ ((d.total - d.libre) / d.total * 100) | round(1) }}
+      # Los procesos con más uso van como atributo; el estado es el primero de la lista
+      - name: "Server procesos"
+        unique_id: consumo_server_procesos
+        icon: mdi:format-list-bulleted
+        value_template: "{{ value_json.procs[0].nombre if value_json.procs else 'sin datos' }}"
+        json_attributes:
+          - procs
+          - discos
+
+# Listas que cambian en cada lectura: guardarlas solo engordaría la base
+recorder:
+  exclude:
+    entities:
+      - sensor.server_procesos
+      - sensor.server_cpu_nucleos
