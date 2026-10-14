@@ -1,0 +1,2014 @@
+# MRTN-HUB kiosk dashboard: pixel clone of the ha-fusion "muted" layout.
+# Requires HACS frontend: button-card, layout-card, card-mod, kiosk-mode.
+# Edit it with ?disable_km appended to the URL (kiosk-mode hides the header).
+# How it's deployed: each view below is one tab/page. build_dashboard.py merges
+# them into a single Lovelace view where pages are shown/hidden by URL hash
+# (#overview, #hub, ...), so the sidebar and tab bar never redraw on tab switch.
+# Don't paste this file in the raw editor as-is: build it first.
+
+kiosk_mode:
+  hide_header: true
+  hide_sidebar: true
+
+button_card_templates:
+  # ha-fusion button: 192x61, round icon on the left, name + state on the right.
+  fusion_tile:
+    show_state: true
+    show_icon: true
+    show_entity_picture: true
+    tap_action:
+      action: more-info
+    hold_action:
+      action: more-info
+    state_display: |
+      [[[
+        if (!entity) return '';
+        const s = entity.state;
+        const map = { home: 'Home', not_home: 'Away', unavailable: 'unavailable', unknown: 'unknown' };
+        if (map[s]) return map[s];
+        // Time helpers (input_datetime without date): "23:00:00" -> "23:00"
+        if (/^\d{2}:\d{2}:\d{2}$/.test(s)) return s.slice(0, 5);
+        const u = entity.attributes.unit_of_measurement;
+        let v = s;
+        // Long decimals (e.g. 16.2491 h) -> at most 2
+        if (s !== '' && !isNaN(s) && (s.split('.')[1] || '').length > 2) v = String(Math.round(Number(s) * 100) / 100);
+        // "10.0" -> "10"
+        if (s !== '' && !isNaN(s) && Number(s) === Math.round(Number(s))) v = String(Math.round(Number(s)));
+        if (u === '$') return `$${v}`;
+        if (u && u.startsWith('$/')) return `$${v}${u.slice(1)}`;
+        return u ? `${v} ${u}` : v;
+      ]]]
+    styles:
+      card:
+        - width: 192px
+        - height: 61px
+        - padding: 0
+        - border: none
+        - border-radius: 10.4px
+        - box-shadow: none
+        - background: rgba(0, 0, 0, 0.15)
+        - font-family: '"Inter Variable", system-ui'
+        - color: rgb(255, 255, 255)
+      grid:
+        - grid-template-areas: '"i n" "i s"'
+        - grid-template-columns: 61px 1fr
+        - grid-template-rows: 1fr 1fr
+      img_cell:
+        - width: 38px
+        - height: 38px
+        - border-radius: 50%
+        - justify-self: center
+        - align-self: center
+        # People get ha-fusion's blue avatar circle; active entities a grey one.
+        - background: |
+            [[[
+              const domain = entity ? entity.entity_id.split('.')[0] : '';
+              if (domain === 'device_tracker' || domain === 'person') return 'rgb(75, 166, 237)';
+              return entity && entity.state === 'on' ? 'rgb(131, 129, 124)' : 'none';
+            ]]]
+      icon:
+        - width: 22px
+        - color: rgb(255, 255, 255)
+      entity_picture:
+        - width: 38px
+        - height: 38px
+        - border-radius: 50%
+      name:
+        - justify-self: start
+        - align-self: end
+        - padding-right: 11.52px
+        - font-size: 15.2px
+        - font-weight: 500
+        - line-height: 19px
+        - color: rgb(255, 255, 255)
+      state:
+        - justify-self: start
+        - align-self: start
+        - padding-right: 11.52px
+        - font-size: 14.8px
+        - line-height: 18px
+        - color: rgba(255, 255, 255, 0.7)
+    state:
+      - value: 'on'
+        id: active_on
+        styles: &active
+          card:
+            - background: rgba(255, 255, 255, 0.85)
+          name:
+            - color: rgb(48, 51, 52)
+          state:
+            - color: rgb(88, 90, 90)
+      - value: home
+        styles: *active
+
+  # Brightness slider for any light: drag across the tile (fill = level).
+  # Double width for touch; add `view_layout: {grid-column: span 2}` where used.
+  fusion_slider:
+    template: fusion_tile
+    # Tap the icon to toggle; drag over the rest of the tile to set brightness.
+    tap_action:
+      action: toggle
+    state_display: |
+      [[[
+        if (!entity || entity.state !== 'on') return entity ? entity.state : '';
+        return `${Math.round((entity.attributes.brightness || 0) / 2.55)} %`;
+      ]]]
+    custom_fields:
+      # Own pointer handling instead of <input type=range>: on touch a range
+      # only reacts to drags, so a plain tap did nothing. Tap = jump to that
+      # point, drag = live preview, release = send. A vertical swipe makes the
+      # browser scroll (touch-action: pan-y) and fires pointercancel -> undo.
+      slider: |
+        [[[
+          const calc = `const r=this.getBoundingClientRect();` +
+            `const v=Math.max(5,Math.min(100,Math.round((event.clientX-r.left)/r.width*100)));`;
+          const paint = `const root=this.getRootNode();const c=root.querySelector('ha-card');` +
+            `const at='calc(61px + (100% - 61px) * '+v+' / 100)';` +
+            `c.style.background='linear-gradient(90deg, rgba(255,255,255,0.22) '+at+', rgba(0,0,0,0.15) '+at+')';` +
+            `const s=root.querySelector('#state');if(s)s.textContent=v+' %';`;
+          const send = `const h=this.getRootNode().host;` +
+            `(h.hass||document.querySelector('home-assistant').hass).callService('light','turn_on',` +
+            `{entity_id:'${entity.entity_id}',brightness_pct:v});`;
+          const down = `this._d=1;const c0=this.getRootNode().querySelector('ha-card');` +
+            `this._bg=c0.style.background;const t0=this.getRootNode().querySelector('#state');this._st=t0?t0.textContent:'';` +
+            `try{this.setPointerCapture(event.pointerId)}catch(e){}` + calc + paint;
+          const move = `if(!this._d)return;` + calc + paint;
+          const up = `if(!this._d)return;this._d=0;event.stopPropagation();` + calc + paint + send;
+          const cancel = `if(!this._d)return;this._d=0;const c=this.getRootNode().querySelector('ha-card');` +
+            `c.style.background=this._bg;const s=this.getRootNode().querySelector('#state');if(s)s.textContent=this._st;`;
+          // Keep every event inside the track, or the card's own tap_action
+          // (toggle, on Lights) would fire too.
+          const stop = 'event.stopPropagation()';
+          return `<div class="track" onpointerdown="event.stopPropagation();${down}" onpointermove="${move}" ` +
+            `onpointerup="${up}" onpointercancel="${cancel}" onmousedown="${stop}" onmouseup="${stop}" ` +
+            `ontouchstart="${stop}" ontouchend="${stop}" onclick="${stop}" ondblclick="${stop}"></div>`;
+        ]]]
+    styles:
+      card:
+        - width: 393.6px
+        - background: |
+            [[[
+              const pct = entity && entity.state === 'on' ? Math.round((entity.attributes.brightness || 0) / 2.55) : 0;
+              const at = `calc(61px + (100% - 61px) * ${pct} / 100)`;
+              return `linear-gradient(90deg, rgba(255, 255, 255, 0.22) ${at}, rgba(0, 0, 0, 0.15) ${at})`;
+            ]]]
+      img_cell:
+        - background: rgb(131, 129, 124)
+      custom_fields:
+        slider:
+          - position: absolute
+          - top: 0
+          - bottom: 0
+          - left: 61px
+          - right: 0
+          - pointer-events: auto
+    state:
+      - value: 'on'
+        id: active_on
+        styles:
+          card:
+            - background: |
+                [[[
+                  const pct = Math.round((entity.attributes.brightness || 0) / 2.55);
+                  const at = `calc(61px + (100% - 61px) * ${pct} / 100)`;
+                  return `linear-gradient(90deg, rgba(255, 255, 255, 0.22) ${at}, rgba(0, 0, 0, 0.15) ${at})`;
+                ]]]
+          name:
+            - color: rgb(255, 255, 255)
+          state:
+            - color: rgba(255, 255, 255, 0.7)
+    extra_styles: |
+      .track {
+        width: 100%;
+        height: 100%;
+        cursor: pointer;
+        pointer-events: auto;
+        touch-action: pan-y;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+  # Tile for a boot-time timestamp sensor: shows "3d 4h" / "5h 12m".
+  fusion_uptime:
+    template: fusion_tile
+    state_display: |
+      [[[
+        const t = Date.now() - new Date(entity.state).getTime();
+        if (isNaN(t)) return entity.state;
+        const d = Math.floor(t / 864e5), h = Math.floor(t % 864e5 / 36e5), m = Math.floor(t % 36e5 / 6e4);
+        return d ? `${d}d ${h}h` : `${h}h ${m}m`;
+      ]]]
+
+  # Tile for a timestamp sensor shown as a clock time ("06:12").
+  fusion_time:
+    template: fusion_tile
+    state_display: |
+      [[[
+        const d = new Date(entity.state);
+        return isNaN(d) ? entity.state : d.toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'});
+      ]]]
+
+  # Stopwatch engine. Runs in the browser (window.__sw), saved in localStorage
+  # so it keeps counting across tabs and reloads. Any card using this template
+  # gets its .swt (time; add "fine" for tenths), .swp (play/pause icon) and
+  # .swlaps (lap list) elements kept up to date.
+  sw_engine:
+    custom_fields:
+      eng: |
+        [[[
+          const W = window;
+          if (!W.__sw) {
+            let saved = {};
+            try { saved = JSON.parse(localStorage.getItem('kioskStopwatch') || '{}'); } catch (e) {}
+            const p = n => String(n).padStart(2, '0');
+            W.__sw = {
+              start: saved.start || null,
+              acc: saved.acc || 0,
+              laps: saved.laps || [],
+              v: 0,
+              cards: new Set(),
+              ms() { return this.acc + (this.start ? Date.now() - this.start : 0); },
+              fmt(ms, fine) {
+                const t = Math.floor(ms / 1000), h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = t % 60;
+                const base = h ? `${h}:${p(m)}:${p(s)}` : `${p(m)}:${p(s)}`;
+                return fine ? `${base}.${Math.floor(ms % 1000 / 100)}` : base;
+              },
+              save() {
+                this.v++;
+                try { localStorage.setItem('kioskStopwatch', JSON.stringify({start: this.start, acc: this.acc, laps: this.laps})); } catch (e) {}
+                this.paint();
+              },
+              toggle() {
+                if (this.start) { this.acc += Date.now() - this.start; this.start = null; }
+                else this.start = Date.now();
+                this.save();
+              },
+              lap() { if (this.ms() > 0) { this.laps.unshift(this.ms()); this.laps = this.laps.slice(0, 20); this.save(); } },
+              reset() { this.start = null; this.acc = 0; this.laps = []; this.save(); },
+              lapsHtml() {
+                return this.laps.slice(0, 6).map((ms, i) =>
+                  `<div class="lap"><span>Lap ${this.laps.length - i}</span><span>${this.fmt(ms, true)}</span></div>`).join('');
+              },
+              paint() {
+                const ms = this.ms();
+                for (const c of this.cards) {
+                  if (!c.isConnected) { this.cards.delete(c); continue; }
+                  const r = c.shadowRoot;
+                  if (!r) continue;
+                  r.querySelectorAll('.swt').forEach(t => { t.textContent = this.fmt(ms, t.classList.contains('fine')); });
+                  r.querySelectorAll('.swp ha-icon').forEach(i => i.setAttribute('icon', this.start ? 'mdi:pause' : 'mdi:play'));
+                  const l = r.querySelector('.swlaps');
+                  if (l && l.dataset.v !== String(this.v)) { l.dataset.v = String(this.v); l.innerHTML = this.lapsHtml(); }
+                }
+              },
+            };
+            setInterval(() => W.__sw.paint(), 100);
+          }
+          W.__sw.cards.add(this);
+          return '';
+        ]]]
+    styles:
+      custom_fields:
+        eng:
+          - display: none
+
+  # Section title ("Room", "Me", ...).
+  fusion_title:
+    show_icon: false
+    show_state: false
+    tap_action:
+      action: none
+    styles:
+      card:
+        - background: none
+        - border: none
+        - box-shadow: none
+        - padding: 0
+        - margin: 0 0 6.4px
+        - font-family: '"Inter Variable", system-ui'
+      name:
+        - justify-self: start
+        - font-size: 28.8px
+        - font-weight: 600
+        - line-height: 35px
+        - color: rgba(255, 255, 255, 0.8)
+
+  # Shared page navigation for the single-view kiosk (see build_dashboard.py).
+  # Pages are shown/hidden from the URL hash (#overview, #hub, ...), so the
+  # sidebar and the tab bar are rendered once and never redrawn on tab switch.
+  kiosk_nav:
+    # A variable (not a custom field): variables are evaluated before the
+    # custom fields that use window.__kioskNav.
+    variables:
+      nav_ready: |
+        [[[
+          if (!window.__kioskNav) {
+            const nav = window.__kioskNav = {
+              pages: new Set(),
+              tabs: new Set(),
+              current() {
+                const h = decodeURIComponent(location.hash.slice(1));
+                return [...nav.pages].some(p => p._page === h) ? h : 'overview';
+              },
+              go(page) { if (nav.current() !== page) location.hash = page; },
+              apply() {
+                const cur = nav.current();
+                for (const p of nav.pages) {
+                  if (!p.isConnected) { nav.pages.delete(p); continue; }
+                  p.style.display = p._page === cur ? '' : 'none';
+                }
+                for (const t of nav.tabs) {
+                  if (!t.isConnected) { nav.tabs.delete(t); continue; }
+                  const r = t.shadowRoot;
+                  if (!r) continue;
+                  r.querySelectorAll('.tab').forEach(s => s.classList.toggle('active', s.dataset.p === cur));
+                  const bar = r.querySelector('.tab') && r.querySelector('.tab').parentElement;
+                  if (bar) bar.__revealed = false;
+                }
+                window.scrollTo(0, 0);
+              },
+            };
+            window.addEventListener('hashchange', () => nav.apply());
+          }
+          return true;
+        ]]]
+
+  # Invisible marker placed first in every page by build_dashboard.py: it finds
+  # the page's layout-card and registers it with the hash navigation.
+  fusion_page:
+    template: kiosk_nav
+    show_icon: false
+    show_name: false
+    show_state: false
+    tap_action:
+      action: none
+    hold_action:
+      action: none
+    custom_fields:
+      reg: |
+        [[[
+          if (!variables.nav_ready) return '';
+          const nav = window.__kioskNav, marker = this, page = variables.page;
+          const attach = (tries) => {
+            let n = marker, box = null;
+            while (n) {
+              if (n !== marker && n.tagName === 'LAYOUT-CARD') { box = n; break; }
+              n = n.parentNode instanceof ShadowRoot ? n.parentNode.host : n.parentNode;
+            }
+            if (!box) { if (tries > 0) setTimeout(() => attach(tries - 1), 50); return; }
+            box._page = page;
+            nav.pages.add(box);
+            box.style.display = nav.current() === page ? '' : 'none';
+          };
+          attach(100);
+          return '';
+        ]]]
+    styles:
+      card:
+        - display: none
+
+  # Whole tab bar. To add a tab: add [path, title] here and a view with that
+  # path below (its first card `template: fusion_tabs`).
+  fusion_tabs:
+    template: kiosk_nav
+    show_icon: false
+    show_name: false
+    show_state: false
+    tap_action:
+      action: none
+    variables:
+      tabs:
+        - [overview, Overview]
+        - [hub, HUB]
+        - [network, Network]
+        - [weather, Weather]
+        - [server, Server]
+        - [energy, Energy]
+        - [automations, Automations]
+    custom_fields:
+      tabs: |
+        [[[
+          if (!variables.nav_ready) return '';
+          const nav = window.__kioskNav;
+          nav.tabs.add(this);
+          const cur = nav.current();
+          const tabsHtml = variables.tabs.map(([path, title]) => {
+            // Touch: button-card cancels the synthetic click, so navigate on
+            // pointerup, unless the finger moved (scroll).
+            const down = `this._x=event.clientX;this._y=event.clientY;`;
+            const up = `event.stopPropagation();` +
+              `if(Math.abs(event.clientX-(this._x??event.clientX))<15&&Math.abs(event.clientY-(this._y??event.clientY))<15)` +
+              `{window.__kioskNav.go('${path}')}`;
+            return `<span class="${path === cur ? 'tab active' : 'tab'}" data-p="${path}" ` +
+              `onpointerdown="${down}" onpointerup="${up}">${title}</span>`;
+          }).join('');
+          // More tabs than fit: the bar scrolls sideways. A small global check
+          // (every 300 ms) scrolls a cut-off active tab into view.
+          if (!window.__tabsReveal) {
+            window.__tabsReveal = new Set();
+            setInterval(() => {
+              for (const c of window.__tabsReveal) {
+                if (!c.isConnected) { window.__tabsReveal.delete(c); continue; }
+                const act = c.shadowRoot && c.shadowRoot.querySelector('.tab.active');
+                const bar = act && act.parentElement;
+                if (!bar || bar.__revealed || !act.getBoundingClientRect().width) continue;
+                if (bar.scrollWidth > bar.clientWidth) {
+                  const left = act.getBoundingClientRect().left - bar.getBoundingClientRect().left;
+                  const over = act.getBoundingClientRect().right - bar.getBoundingClientRect().right;
+                  if (over > 0) bar.scrollLeft += over + 22;
+                  else if (left < 0) bar.scrollLeft += left - 22;
+                }
+                bar.__revealed = true;
+              }
+            }, 300);
+          }
+          window.__tabsReveal.add(this);
+          return tabsHtml;
+        ]]]
+    styles:
+      card:
+        - background: none
+        - border: none
+        - box-shadow: none
+        - border-radius: 0
+        - padding: 0
+        - margin: 0 0 30px
+        - overflow: visible
+        - font-family: '"Inter Variable", system-ui'
+      grid:
+        - grid-template-areas: '"tabs"'
+        - grid-template-columns: minmax(0, 1fr)
+      custom_fields:
+        tabs:
+          - justify-self: stretch
+          - min-width: 0
+          - display: flex
+          - gap: 22px
+          - pointer-events: auto
+          # Sideways scroll (no scrollbar) when the tabs don't fit; the vertical
+          # padding/margin pair keeps the enlarged touch area inside the scroller.
+          - overflow-x: auto
+          - overflow-y: hidden
+          - scrollbar-width: none
+          - padding: 0 11px
+          - margin: -14px -11px -10px
+    extra_styles: |
+      /* Bigger touch target (padding) cancelled by negative margins, so the
+         layout and the 2px underline stay exactly where they were. */
+      .tab {
+        position: relative;
+        pointer-events: auto;
+        cursor: pointer;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+        user-select: none;
+        flex: 0 0 auto;
+        padding: 14px 11px 16px;
+        margin: 0 -11px;
+        font-size: 22px;
+        font-weight: 700;
+        line-height: 26px;
+        color: rgba(255, 255, 255, 0.4);
+      }
+      #tabs::-webkit-scrollbar, [id="tabs"]::-webkit-scrollbar { display: none; }
+      .tab.active { color: rgb(255, 255, 255); }
+      .tab.active::after {
+        content: "";
+        position: absolute;
+        left: 11px;
+        right: 11px;
+        bottom: 10px;
+        height: 2px;
+        background: rgb(255, 255, 255);
+      }
+
+  # Section title for every section after the first one in a column.
+  fusion_title_next:
+    template: fusion_title
+    styles:
+      card:
+        - margin: 24px 0 6.4px
+
+# ---- Shared building blocks (YAML anchors, expanded on save) ----
+
+x-sidebar: &sidebar
+  type: vertical-stack
+  view_layout:
+    grid-area: side
+  card_mod:
+    style: |
+      :host {
+        display: block;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 344px;
+        height: 100vh;
+        overflow: hidden;
+        z-index: 1;
+        box-sizing: border-box;
+        padding: 0 22.4px 22.4px;
+        background: rgba(0, 0, 0, 0.06);
+        border-right: 1px solid rgba(115, 115, 115, 0.25);
+        font-family: "Inter Variable", system-ui;
+      }
+  cards:
+    # Clock
+    - type: custom:button-card
+      show_icon: false
+      show_name: false
+      show_state: false
+      show_label: true
+      triggers_update: all
+      label: |
+        [[[ const d = new Date(); return d.toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'}); ]]]
+      tap_action:
+        action: none
+      styles:
+        card:
+          - background: none
+          - border: none
+          - box-shadow: none
+          - padding: 16px 0 0 9.6px
+          - margin-left: -1.6px
+          - font-family: '"Inter Variable", system-ui'
+        label:
+          - justify-self: start
+          - font-size: 54.4px
+          - font-weight: 500
+          - line-height: 64px
+          - color: rgba(255, 255, 255, 0.8)
+    # Date
+    - type: custom:button-card
+      show_icon: false
+      show_name: true
+      show_state: false
+      show_label: true
+      triggers_update: all
+      name: |
+        [[[ return new Date().toLocaleDateString('en-US', {weekday: 'long'}); ]]]
+      label: |
+        [[[ return new Date().toLocaleDateString('en-US', {month: 'long', day: 'numeric'}); ]]]
+      tap_action:
+        action: none
+      styles:
+        card:
+          - background: none
+          - border: none
+          - box-shadow: none
+          - padding: 10px 0 31px 9.6px
+          - font-family: '"Inter Variable", system-ui'
+        name:
+          - justify-self: start
+          - font-size: 16px
+          - line-height: 19px
+          - color: rgba(255, 255, 255, 0.8)
+        label:
+          - justify-self: start
+          - font-size: 16px
+          - line-height: 19px
+          - color: rgba(255, 255, 255, 0.8)
+    # Forecast: 6 days with ha-fusion's Meteocons icons (/local/kiosk/meteocons),
+    # read from the Open-Meteo daily lists in sensor.clima_pronostico_diario.
+    - type: custom:button-card
+      entity: sensor.clima_pronostico_diario
+      show_icon: false
+      show_name: false
+      show_state: false
+      tap_action:
+        action: more-info
+        entity: weather.clima
+      custom_fields:
+        forecast: |
+          [[[
+            const cond = {0: 'sunny', 1: 'sunny', 2: 'partlycloudy', 3: 'cloudy', 45: 'fog', 48: 'fog',
+              51: 'rainy', 53: 'rainy', 55: 'rainy', 56: 'snowy-rainy', 57: 'snowy-rainy',
+              61: 'rainy', 63: 'rainy', 65: 'pouring', 66: 'snowy-rainy', 67: 'snowy-rainy',
+              71: 'snowy', 73: 'snowy', 75: 'snowy', 77: 'snowy', 80: 'rainy', 81: 'rainy', 82: 'pouring',
+              85: 'snowy', 86: 'snowy', 95: 'lightning-rainy', 96: 'lightning-rainy', 99: 'lightning-rainy'};
+            const a = entity.attributes;
+            const days = (a.time || []).slice(0, 6);
+            return '<div class="row">' + days.map((t, i) => {
+              const day = new Date(t + 'T12:00:00').toLocaleDateString('en-US', {weekday: 'short'});
+              const icon = cond[a.weather_code[i]] || 'cloudy';
+              const temp = Math.round(a.temperature_2m_max[i]);
+              return `<div class="item"><div class="day">${day}</div>` +
+                `<img src="/local/kiosk/meteocons/${icon}-day.svg">` +
+                `<div class="temp">${temp}°C</div></div>`;
+            }).join('') + '</div>';
+          ]]]
+      styles:
+        card:
+          - background: none
+          - border: none
+          - box-shadow: none
+          - padding: 10px 0 9px
+          - font-family: '"Inter Variable", system-ui'
+        grid:
+          - grid-template-areas: '"forecast"'
+        custom_fields:
+          forecast:
+            - justify-self: stretch
+      extra_styles: |
+        .row {
+          display: grid;
+          grid-template-columns: repeat(6, minmax(0, 1fr));
+          color: rgba(255, 255, 255, 0.8);
+          font-size: 16px;
+          text-align: center;
+        }
+        ha-card { overflow: visible !important; }
+        .item { display: flex; flex-direction: column; align-items: center; }
+        .day, .temp { height: 23px; line-height: 23px; }
+        img { width: 53px; height: 53px; margin: -1px 0 3px; }
+    # Temperature: same as ha-fusion's graph item. Hourly statistics (mean) for the
+    # last ~month, d3 curveBasis line (1px) over a 50% -> 0% white gradient, 80px tall.
+    - type: custom:button-card
+      entity: sensor.clima_temperatura
+      name: Temperature
+      show_icon: false
+      show_state: false
+      show_label: true
+      label: |
+        [[[ return `${entity.state} ${entity.attributes.unit_of_measurement || ''}`; ]]]
+      tap_action:
+        action: more-info
+      custom_fields:
+        graph: |
+          [[[
+            const W = 279, H = 80, card = this, now = Date.now();
+            const draw = (rows) => {
+              const pts = rows
+                .map(r => [new Date(r.start).getTime(), r.mean !== undefined && r.mean !== null ? r.mean : r.state])
+                .filter(p => p[1] !== null && p[1] !== undefined);
+              if (pts.length < 2) return '';
+              // d3 linear scale .nice() (10 ticks)
+              let lo = Math.min(...pts.map(p => p[1])), hi = Math.max(...pts.map(p => p[1]));
+              if (hi === lo) { lo -= 1; hi += 1; }
+              const raw = (hi - lo) / 10;
+              let step = Math.pow(10, Math.floor(Math.log10(raw)));
+              const err = raw / step;
+              if (err >= Math.sqrt(50)) step *= 10; else if (err >= Math.sqrt(10)) step *= 5; else if (err >= Math.sqrt(2)) step *= 2;
+              lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step;
+              const t0 = pts[0][0], t1 = pts[pts.length - 1][0];
+              const x = t => 1 + (t - t0) / (t1 - t0 || 1) * (W - 2);
+              const y = v => (H - 1) - (v - lo) / (hi - lo) * (H - 2);
+              const xy = pts.map(p => [x(p[0]), y(p[1])]);
+              // d3 curveBasis
+              const f = n => n.toFixed(2);
+              let d = `M${f(xy[0][0])},${f(xy[0][1])}`;
+              let [x0, y0] = xy[0], [x1, y1] = xy[1];
+              d += `L${f((5 * x0 + x1) / 6)},${f((5 * y0 + y1) / 6)}`;
+              const bez = (xn, yn) => {
+                d += `C${f((2 * x0 + x1) / 3)},${f((2 * y0 + y1) / 3)},${f((x0 + 2 * x1) / 3)},${f((y0 + 2 * y1) / 3)},${f((x0 + 4 * x1 + xn) / 6)},${f((y0 + 4 * y1 + yn) / 6)}`;
+                x0 = x1; y0 = y1; x1 = xn; y1 = yn;
+              };
+              for (let i = 2; i < xy.length; i++) bez(xy[i][0], xy[i][1]);
+              bez(x1, y1);
+              d += `L${f(x1)},${f(y1)}`;
+              const area = `${d}L${f(xy[xy.length - 1][0])},${H - 1}L${f(xy[0][0])},${H - 1}Z`;
+              return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">` +
+                `<defs><linearGradient id="kg" x1="0" y1="0" x2="0" y2="1">` +
+                `<stop offset="0%" stop-color="rgb(255,255,255)" stop-opacity="0.5"/>` +
+                `<stop offset="100%" stop-color="rgb(255,255,255)" stop-opacity="0"/></linearGradient></defs>` +
+                `<path d="${area}" fill="url(#kg)"/>` +
+                `<path d="${d}" fill="none" stroke="#ffffff" stroke-width="1" stroke-linecap="butt"/></svg>`;
+            };
+            // Shared across views: every tab has its own copy of this card, and
+            // a per-card cache made the graph blink empty on each tab switch.
+            const cache = window.__kioskGraphs = window.__kioskGraphs || {};
+            const key = entity.entity_id;
+            if (!cache[key] || now - cache[key].t > 600000) {
+              cache[key] = { t: now, svg: cache[key] ? cache[key].svg : '' };
+              hass.connection.sendMessagePromise({
+                type: 'recorder/statistics_during_period',
+                start_time: new Date(now - 2629800 * 1000).toISOString(),
+                end_time: new Date(now).toISOString(),
+                statistic_ids: [entity.entity_id],
+                period: 'hour',
+              }).then(res => {
+                cache[key].svg = draw(res[key] || []);
+                const el = card.shadowRoot && card.shadowRoot.getElementById('kgraph');
+                if (el) el.innerHTML = cache[key].svg;
+              }).catch(() => {});
+            }
+            return `<div id="kgraph">${cache[key].svg}</div>`;
+          ]]]
+      styles:
+        card:
+          - background: none
+          - border: none
+          - box-shadow: none
+          - border-radius: 0
+          - padding: 0 9.6px
+          - margin-top: 30px
+          - font-family: '"Inter Variable", system-ui'
+        grid:
+          - grid-template-areas: '"n" "l" "graph"'
+          - grid-template-rows: 20px 24px 80px
+        name:
+          - justify-self: start
+          - font-size: 16px
+          - line-height: 20px
+          - color: rgba(255, 255, 255, 0.8)
+        label:
+          - justify-self: start
+          - align-self: start
+          - font-size: 16px
+          - line-height: 20px
+          - color: rgba(255, 255, 255, 0.8)
+        custom_fields:
+          graph:
+            - height: 80px
+            - line-height: 0
+
+x-layout: &layout
+  grid-template-columns: 344px 1fr
+  grid-template-rows: auto
+  grid-template-areas: '"side main"'
+  grid-gap: 0
+  margin: 0
+  padding: 0
+  card_margin: 0px
+
+x-main-layout: &main_layout
+  padding: 26px 32px 32px
+  margin: 0
+  card_margin: 0px
+  grid-template-columns: 1fr
+  grid-gap: 0
+
+x-tiles-layout: &tiles_layout
+  grid-template-columns: repeat(auto-fill, 192px)
+  grid-gap: 9.6px
+  margin: 0
+  padding: 0
+  card_margin: 0px
+
+# Two columns on wide screens; one column on the 5" kiosk (1024x576 CSS px at
+# TouchKio's 125% zoom), where a half column would fit only one 192px tile.
+x-columns-layout: &columns_layout
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr)
+  grid-gap: 24px
+  margin: 0
+  padding: 0
+  card_margin: 0px
+  mediaquery:
+    "(max-width: 1200px)":
+      grid-template-columns: minmax(0, 1fr)
+
+# Any native/HACS card (graphs, gauges, maps...): wraps to as many columns as fit.
+x-charts-layout: &charts_layout
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr))
+  grid-gap: 9.6px
+  margin: 0
+  padding: 0
+  card_margin: 0px
+
+views:
+  - title: Overview
+    path: overview
+    type: custom:grid-layout
+    theme: MRTN Kiosk
+    layout: *layout
+    cards:
+      - *sidebar
+      - type: custom:layout-card
+        layout_type: custom:grid-layout
+        layout: *main_layout
+        view_layout:
+          grid-area: main
+        cards:
+          - type: custom:button-card
+            template: fusion_tabs
+            variables:
+              active: overview
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout: *columns_layout
+            cards:
+              - type: vertical-stack
+                cards:
+                  - type: custom:button-card
+                    template: fusion_title
+                    name: Room
+                  - type: custom:layout-card
+                    layout_type: custom:grid-layout
+                    layout: *tiles_layout
+                    cards:
+                      - type: custom:button-card
+                        template: fusion_slider
+                        entity: light.cla60_smart_wifi
+                        name: Lights
+                        view_layout:
+                          grid-column: span 2
+                  # Untitled section: tap Sun or Stopwatch to open its view.
+                  - type: custom:layout-card
+                    layout_type: custom:grid-layout
+                    layout:
+                      <<: *tiles_layout
+                      margin: 24px 0 0
+                    cards:
+                      - type: custom:button-card
+                        template: fusion_tile
+                        entity: sun.sun
+                        name: Sun
+                        icon: |
+                          [[[ return entity.state === 'above_horizon' ? 'mdi:weather-sunny' : 'mdi:weather-night'; ]]]
+                        state_display: |
+                          [[[ return {above_horizon: 'Above horizon', below_horizon: 'Below horizon'}[entity.state] || entity.state; ]]]
+                        tap_action: { action: navigate, navigation_path: sun }
+                      - type: custom:button-card
+                        template: [fusion_tile, sw_engine]
+                        name: Stopwatch
+                        icon: mdi:timer-outline
+                        show_state: false
+                        tap_action: { action: navigate, navigation_path: stopwatch }
+                        custom_fields:
+                          s: |
+                            [[[ return `<span class="swt">${window.__sw ? window.__sw.fmt(window.__sw.ms()) : '00:00'}</span>`; ]]]
+                        styles:
+                          custom_fields:
+                            s:
+                              - justify-self: start
+                              - align-self: start
+                              - padding-right: 11.52px
+                              - font-size: 14.8px
+                              - line-height: 18px
+                              - font-variant-numeric: tabular-nums
+                              - color: rgba(255, 255, 255, 0.7)
+                  # Media: placeholder until the Spotify integration is added.
+                  - type: custom:button-card
+                    template: fusion_title_next
+                    name: Media
+                  - type: custom:layout-card
+                    layout_type: custom:grid-layout
+                    layout: *tiles_layout
+                    cards:
+                      - type: custom:button-card
+                        template: fusion_tile
+                        name: Spotify
+                        icon: mdi:spotify
+                        show_state: false
+                        tap_action: { action: none }
+                        view_layout:
+                          grid-column: span 2
+                        custom_fields:
+                          s: Not connected yet
+                        styles:
+                          card:
+                            - width: 393.6px
+                          img_cell:
+                            - background: rgb(30, 215, 96)
+                          custom_fields:
+                            s:
+                              - justify-self: start
+                              - align-self: start
+                              - padding-right: 11.52px
+                              - font-size: 14.8px
+                              - line-height: 18px
+                              - color: rgba(255, 255, 255, 0.7)
+              - type: vertical-stack
+                cards:
+                  - type: custom:button-card
+                    template: fusion_title
+                    name: Me
+                  - type: custom:layout-card
+                    layout_type: custom:grid-layout
+                    layout: *tiles_layout
+                    cards:
+                      - type: custom:button-card
+                        template: fusion_tile
+                        entity: device_tracker.a35_martin
+                        name: Martin
+                        tap_action: { action: navigate, navigation_path: map }
+                      - type: custom:button-card
+                        template: fusion_tile
+                        entity: sensor.ruta_tiempo
+                        name: Travel time
+                      # Swaps origin and destination (way there / way back).
+                      - type: custom:button-card
+                        template: fusion_tile
+                        entity: input_text.ruta_destino
+                        name: Route
+                        icon: mdi:swap-horizontal
+                        state_display: |
+                          [[[
+                            const d = entity.state && !['unknown', 'unavailable'].includes(entity.state) ? entity.state.split(',')[0] : '-';
+                            return `to ${d}`;
+                          ]]]
+                        tap_action:
+                          action: javascript
+                          javascript: |
+                            [[[
+                              const o = states['input_text.ruta_origen'].state;
+                              const d = states['input_text.ruta_destino'].state;
+                              hass.callService('input_text', 'set_value', {entity_id: 'input_text.ruta_origen', value: d});
+                              hass.callService('input_text', 'set_value', {entity_id: 'input_text.ruta_destino', value: o});
+                            ]]]
+
+  - title: HUB
+    path: hub
+    type: custom:grid-layout
+    theme: MRTN Kiosk
+    layout: *layout
+    cards:
+      - *sidebar
+      - type: custom:layout-card
+        layout_type: custom:grid-layout
+        layout: *main_layout
+        view_layout:
+          grid-area: main
+        cards:
+          - type: custom:button-card
+            template: fusion_tabs
+            variables:
+              active: hub
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout: *columns_layout
+            cards:
+              - type: vertical-stack
+                cards:
+                  - type: custom:button-card
+                    template: fusion_title
+                    name: State
+                  - type: custom:layout-card
+                    layout_type: custom:grid-layout
+                    layout: *tiles_layout
+                    cards:
+                      - type: custom:button-card
+                        template: fusion_slider
+                        entity: light.touchkio_mrtn_hub_display
+                        name: Brightness
+                        tap_action: { action: none }
+                        view_layout:
+                          grid-column: span 2
+                      - type: custom:button-card
+                        template: fusion_tile
+                        entity: number.touchkio_mrtn_hub_page_zoom
+                        name: Page zoom
+              - type: vertical-stack
+                cards:
+                  - type: custom:button-card
+                    template: fusion_title
+                    name: Hardware
+                  - type: custom:layout-card
+                    layout_type: custom:grid-layout
+                    layout: *tiles_layout
+                    cards:
+                      - type: custom:button-card
+                        template: fusion_tile
+                        entity: sensor.touchkio_mrtn_hub_memory_usage
+                        name: Memory usage
+                      - type: custom:button-card
+                        template: fusion_tile
+                        entity: sensor.touchkio_mrtn_hub_processor_usage
+                        name: CPU Usage
+                      - type: custom:button-card
+                        template: fusion_tile
+                        entity: sensor.touchkio_mrtn_hub_processor_temperature
+                        name: CPU Temp
+
+  - title: Network
+    path: network
+    type: custom:grid-layout
+    theme: MRTN Kiosk
+    layout: *layout
+    cards:
+      - *sidebar
+      - type: custom:layout-card
+        layout_type: custom:grid-layout
+        layout: *main_layout
+        view_layout:
+          grid-area: main
+        cards:
+          - type: custom:button-card
+            template: fusion_tabs
+            variables:
+              active: network
+          - type: custom:button-card
+            template: fusion_title
+            name: AdGuard
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout: *tiles_layout
+            cards:
+              - type: custom:button-card
+                template: fusion_tile
+                entity: sensor.adguard_home_dns_queries_blocked
+                name: DNS queries blocked
+              - type: custom:button-card
+                template: fusion_tile
+                entity: sensor.adguard_home_dns_queries
+                name: DNS queries
+              - type: custom:button-card
+                template: fusion_tile
+                entity: sensor.adguard_home_average_processing_speed
+                name: Avg proc speed
+          - type: custom:button-card
+            template: fusion_title
+            name: Router
+            styles:
+              card:
+                - margin: 24px 0 6.4px
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout: *tiles_layout
+            cards:
+              - type: custom:button-card
+                template: fusion_tile
+                entity: sensor.tp_link_router_total_clients
+                name: Total clients
+              - type: custom:button-card
+                template: fusion_tile
+                entity: sensor.tp_link_router_dhcp_reservations
+                name: DHCP Reservations
+              - type: custom:button-card
+                template: fusion_tile
+                entity: sensor.tp_link_router_cpu_used
+                name: CPU used
+              - type: custom:button-card
+                template: fusion_tile
+                entity: sensor.tp_link_router_memory_used
+                name: Memory used
+          - type: custom:button-card
+            template: fusion_title_next
+            name: History
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout: *charts_layout
+            cards:
+              - type: gauge
+                entity: sensor.adguard_home_dns_queries_blocked_ratio
+                name: Blocked
+                min: 0
+                max: 100
+                needle: true
+                segments:
+                  - from: 0
+                    color: var(--info-color)
+                  - from: 15
+                    color: var(--success-color)
+                  - from: 50
+                    color: var(--warning-color)
+              - type: history-graph
+                title: DNS queries (24 h)
+                hours_to_show: 24
+                entities:
+                  - entity: sensor.adguard_home_dns_queries
+                    name: Total
+                  - entity: sensor.adguard_home_dns_queries_blocked
+                    name: Blocked
+              - type: history-graph
+                title: Response time (24 h)
+                hours_to_show: 24
+                entities:
+                  - entity: sensor.adguard_home_average_processing_speed
+                    name: ms
+
+  - title: Weather
+    path: weather
+    type: custom:grid-layout
+    theme: MRTN Kiosk
+    layout: *layout
+    cards:
+      - *sidebar
+      - type: custom:layout-card
+        layout_type: custom:grid-layout
+        layout: *main_layout
+        view_layout:
+          grid-area: main
+        cards:
+          - type: custom:button-card
+            template: fusion_tabs
+            variables:
+              active: weather
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout: *columns_layout
+            cards:
+              - type: vertical-stack
+                cards:
+                  - type: custom:button-card
+                    template: fusion_title
+                    name: Now
+                  - type: custom:weather-forecast-card
+                    entity: weather.clima
+                    show_condition_effects: true
+                    default_forecast: hourly
+                    forecast:
+                      mode: chart
+                      extra_attribute: precipitation_probability
+                      show_attribute_selector: true
+                  - type: custom:button-card
+                    template: fusion_title_next
+                    name: Week
+                  - type: custom:weather-forecast-card
+                    entity: weather.clima
+                    show_current: false
+                    forecast_types: daily
+                    forecast:
+                      extra_attribute: precipitation_probability
+              - type: vertical-stack
+                cards:
+                  - type: custom:button-card
+                    template: fusion_title
+                    name: Conditions
+                  - type: custom:layout-card
+                    layout_type: custom:grid-layout
+                    layout: *tiles_layout
+                    cards:
+                      - type: custom:button-card
+                        template: fusion_tile
+                        entity: sensor.clima_sensacion_termica
+                        name: Feels like
+                      - type: custom:button-card
+                        template: fusion_tile
+                        entity: sensor.clima_humedad
+                        name: Humidity
+                      - type: custom:button-card
+                        template: fusion_tile
+                        entity: sensor.clima_viento
+                        name: Wind
+                      - type: custom:button-card
+                        template: fusion_tile
+                        entity: sensor.clima_rafagas
+                        name: Gusts
+                      - type: custom:button-card
+                        template: fusion_tile
+                        entity: sensor.clima_precipitacion
+                        name: Precipitation
+                      - type: custom:button-card
+                        template: fusion_tile
+                        entity: sensor.clima_nubosidad
+                        name: Cloud cover
+                      - type: custom:button-card
+                        template: fusion_tile
+                        entity: sensor.clima_indice_uv
+                        name: UV index
+                      - type: custom:button-card
+                        template: fusion_tile
+                        entity: sensor.clima_visibilidad
+                        name: Visibility
+                      - type: custom:button-card
+                        template: fusion_tile
+                        entity: sensor.clima_punto_de_rocio
+                        name: Dew point
+                      - type: custom:button-card
+                        template: fusion_tile
+                        entity: sensor.clima_presion
+                        name: Pressure
+                  - type: custom:button-card
+                    template: fusion_title_next
+                    name: Air & Sun
+                  - type: custom:layout-card
+                    layout_type: custom:grid-layout
+                    layout: *tiles_layout
+                    cards:
+                      - type: custom:button-card
+                        template: fusion_tile
+                        entity: sensor.clima_calidad_del_aire
+                        name: Air quality
+                      - type: custom:button-card
+                        template: fusion_tile
+                        entity: sensor.clima_pm2_5
+                        name: PM2.5
+                      - type: custom:button-card
+                        template: fusion_tile
+                        entity: sensor.clima_pm10
+                        name: PM10
+                      - type: custom:button-card
+                        template: fusion_tile
+                        entity: sensor.sun_next_rising
+                        name: Sunrise
+                        state_display: |
+                          [[[ return new Date(entity.state).toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'}); ]]]
+                      - type: custom:button-card
+                        template: fusion_tile
+                        entity: sensor.sun_next_setting
+                        name: Sunset
+                        state_display: |
+                          [[[ return new Date(entity.state).toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'}); ]]]
+                      - type: custom:button-card
+                        template: fusion_tile
+                        entity: sensor.bmp280_esp32_c3_temperatura
+                        name: Indoor temp
+                      - type: custom:button-card
+                        template: fusion_tile
+                        entity: sensor.bmp280_esp32_c3_presion
+                        name: Barometer
+          - type: custom:button-card
+            template: fusion_title_next
+            name: Trends
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout: *charts_layout
+            cards:
+              - type: history-graph
+                title: Temperature (48 h)
+                hours_to_show: 48
+                entities:
+                  - entity: sensor.clima_temperatura
+                    name: Outside
+                  - entity: sensor.clima_sensacion_termica
+                    name: Feels like
+                  - entity: sensor.bmp280_esp32_c3_temperatura
+                    name: Inside
+              - type: history-graph
+                title: Pressure (48 h)
+                hours_to_show: 48
+                entities:
+                  - entity: sensor.bmp280_esp32_c3_presion
+                    name: Barometer
+                  - entity: sensor.clima_presion
+                    name: Sea level
+          - type: custom:button-card
+            template: fusion_title_next
+            name: Radar
+          - type: custom:windy-card
+            location: zone.home
+            overlay: radar
+            zoom: 7
+            height: 420
+            metric_wind: km/h
+            show_marker: true
+            hide_message: true
+
+  - title: Server
+    path: server
+    type: custom:grid-layout
+    theme: MRTN Kiosk
+    layout: *layout
+    cards:
+      - *sidebar
+      - type: custom:layout-card
+        layout_type: custom:grid-layout
+        layout: *main_layout
+        view_layout:
+          grid-area: main
+        cards:
+          - type: custom:button-card
+            template: fusion_tabs
+            variables:
+              active: server
+          # MRTN-SERVER (Windows host, via Glances)
+          - type: custom:button-card
+            template: fusion_title
+            name: MRTN-SERVER
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout: *tiles_layout
+            cards:
+              - type: custom:button-card
+                template: fusion_tile
+                entity: sensor.host_docker_internal_cpu_usage
+                name: CPU
+                icon: mdi:cpu-64-bit
+              - type: custom:button-card
+                template: fusion_tile
+                entity: sensor.host_docker_internal_memory_usage
+                name: Memory
+                icon: mdi:memory
+              - type: custom:button-card
+                template: fusion_uptime
+                entity: sensor.host_docker_internal_uptime
+                name: Uptime
+                icon: mdi:timer-outline
+              - type: custom:button-card
+                template: fusion_tile
+                entity: sensor.host_docker_internal_c_disk_usage
+                name: Disk C
+                icon: mdi:harddisk
+              - type: custom:button-card
+                template: fusion_tile
+                entity: sensor.host_docker_internal_d_disk_usage
+                name: Disk D
+                icon: mdi:harddisk
+              - type: custom:button-card
+                template: fusion_tile
+                entity: sensor.bedroom_plug_server_power
+                name: Power
+                tap_action: { action: none }
+                hold_action: { action: none }
+              - type: custom:button-card
+                template: fusion_tile
+                entity: sensor.host_docker_internal_wi_fi_rx
+                name: Wi-Fi down
+                icon: mdi:download
+              - type: custom:button-card
+                template: fusion_tile
+                entity: sensor.host_docker_internal_wi_fi_tx
+                name: Wi-Fi up
+                icon: mdi:upload
+          # The Docker VM Home Assistant runs in (System Monitor)
+          - type: custom:button-card
+            template: fusion_title_next
+            name: Home Assistant
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout: *tiles_layout
+            cards:
+              - type: custom:button-card
+                template: fusion_tile
+                entity: sensor.system_monitor_processor_use
+                name: CPU
+                icon: mdi:cpu-64-bit
+              - type: custom:button-card
+                template: fusion_tile
+                entity: sensor.system_monitor_memory_usage
+                name: Memory
+                icon: mdi:memory
+              - type: custom:button-card
+                template: fusion_tile
+                entity: sensor.system_monitor_disk_usage
+                name: Disk
+                icon: mdi:harddisk
+          - type: custom:button-card
+            template: fusion_title_next
+            name: History
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout: *charts_layout
+            cards:
+              - type: history-graph
+                title: CPU and memory (24 h)
+                hours_to_show: 24
+                entities:
+                  - entity: sensor.host_docker_internal_cpu_usage
+                    name: CPU
+                  - entity: sensor.host_docker_internal_memory_usage
+                    name: Memory
+              - type: history-graph
+                title: Wi-Fi (24 h)
+                hours_to_show: 24
+                entities:
+                  - entity: sensor.host_docker_internal_wi_fi_rx
+                    name: Down
+                  - entity: sensor.host_docker_internal_wi_fi_tx
+                    name: Up
+              - type: history-graph
+                title: Power (24 h)
+                hours_to_show: 24
+                entities:
+                  - entity: sensor.bedroom_plug_server_power
+                    name: Server
+              - type: gauge
+                entity: sensor.host_docker_internal_c_disk_usage
+                name: Disk C
+                min: 0
+                max: 100
+                severity:
+                  green: 0
+                  yellow: 75
+                  red: 90
+              - type: gauge
+                entity: sensor.host_docker_internal_d_disk_usage
+                name: Disk D
+                min: 0
+                max: 100
+                severity:
+                  green: 0
+                  yellow: 75
+                  red: 90
+
+  - title: Energy
+    path: energy
+    type: custom:grid-layout
+    theme: MRTN Kiosk
+    layout: *layout
+    cards:
+      - *sidebar
+      - type: custom:layout-card
+        layout_type: custom:grid-layout
+        layout: *main_layout
+        view_layout:
+          grid-area: main
+        cards:
+          - type: custom:button-card
+            template: fusion_tabs
+            variables:
+              active: energy
+          # Read-only: power and cost sensors, no plug switches.
+          - type: custom:button-card
+            template: fusion_title
+            name: Now
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout: *tiles_layout
+            cards:
+              - type: custom:button-card
+                template: fusion_tile
+                entity: sensor.bedroom_plug_server_power
+                name: Server
+                tap_action: { action: none }
+                hold_action: { action: none }
+              - type: custom:button-card
+                template: fusion_tile
+                entity: sensor.bedroom_plug_ac_power
+                name: AC
+                icon: mdi:air-conditioner
+                tap_action: { action: none }
+                hold_action: { action: none }
+              - type: custom:button-card
+                template: fusion_tile
+                entity: sensor.tarifa_precio_final
+                name: Tariff
+                icon: mdi:cash
+          - type: custom:button-card
+            template: fusion_title_next
+            name: Today
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout: *tiles_layout
+            cards:
+              - type: custom:button-card
+                template: fusion_tile
+                entity: sensor.server_energia_hoy
+                name: Server
+                icon: mdi:server
+              - type: custom:button-card
+                template: fusion_tile
+                entity: sensor.ac_energia_hoy
+                name: AC
+                icon: mdi:air-conditioner
+              - type: custom:button-card
+                template: fusion_tile
+                entity: sensor.pc_main_energia_hoy
+                name: PC
+                icon: mdi:desktop-tower
+              - type: custom:button-card
+                template: fusion_tile
+                entity: sensor.server_costo_hoy
+                name: Server cost
+                icon: mdi:cash
+              - type: custom:button-card
+                template: fusion_tile
+                entity: sensor.ac_costo_hoy
+                name: AC cost
+                icon: mdi:cash
+              - type: custom:button-card
+                template: fusion_tile
+                entity: sensor.pc_main_costo_hoy
+                name: PC cost
+                icon: mdi:cash
+              - type: custom:button-card
+                template: fusion_tile
+                entity: sensor.server_horas_hoy
+                name: Server on
+                icon: mdi:clock-outline
+              - type: custom:button-card
+                template: fusion_tile
+                entity: sensor.ac_horas_hoy
+                name: AC on
+                icon: mdi:clock-outline
+              - type: custom:button-card
+                template: fusion_tile
+                entity: sensor.pc_main_horas_hoy
+                name: PC on
+                icon: mdi:clock-outline
+          - type: custom:button-card
+            template: fusion_title_next
+            name: Month
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout: *tiles_layout
+            cards:
+              - type: custom:button-card
+                template: fusion_tile
+                entity: sensor.server_costo_mes
+                name: Server
+                icon: mdi:server
+              - type: custom:button-card
+                template: fusion_tile
+                entity: sensor.ac_costo_mes
+                name: AC
+                icon: mdi:air-conditioner
+              - type: custom:button-card
+                template: fusion_tile
+                entity: sensor.pc_main_costo_mes
+                name: PC
+                icon: mdi:desktop-tower
+              - type: custom:button-card
+                template: fusion_tile
+                entity: sensor.server_proyeccion_mes
+                name: Server forecast
+                icon: mdi:chart-line
+              - type: custom:button-card
+                template: fusion_tile
+                entity: sensor.ac_proyeccion_mes
+                name: AC forecast
+                icon: mdi:chart-line
+              - type: custom:button-card
+                template: fusion_tile
+                entity: sensor.pc_main_proyeccion_mes
+                name: PC forecast
+                icon: mdi:chart-line
+          - type: custom:button-card
+            template: fusion_title_next
+            name: History
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout: *charts_layout
+            cards:
+              - type: statistics-graph
+                title: Energy per day (14 d)
+                chart_type: bar
+                period: day
+                days_to_show: 14
+                stat_types:
+                  - change
+                entities:
+                  - entity: sensor.server_energia
+                    name: Server
+                  - entity: sensor.ac_energia
+                    name: AC
+                  - entity: sensor.pc_main_energia
+                    name: PC
+              - type: history-graph
+                title: Power (24 h)
+                hours_to_show: 24
+                entities:
+                  - entity: sensor.bedroom_plug_server_power
+                    name: Server
+                  - entity: sensor.bedroom_plug_ac_power
+                    name: AC
+
+  # Opened by tapping "Martin" on Overview (like ha-fusion's map popup).
+  # Not in the tab bar; any tab takes you back.
+  - title: Map
+    path: map
+    subview: true
+    type: custom:grid-layout
+    theme: MRTN Kiosk
+    layout: *layout
+    cards:
+      - *sidebar
+      - type: custom:layout-card
+        layout_type: custom:grid-layout
+        layout: *main_layout
+        view_layout:
+          grid-area: main
+        cards:
+          - type: custom:button-card
+            template: fusion_tabs
+            variables:
+              active: map
+          - type: custom:button-card
+            template: fusion_title
+            entity: device_tracker.a35_martin
+            name: |
+              [[[ const z = { home: 'Home', not_home: 'Away' }; return `Martin · ${z[entity.state] || entity.state}`; ]]]
+          # HA's own map card needs a CARTO API key now; this uses MapTiler
+          # streets-v2-dark like ha-fusion (/local/kiosk/map.html, see kiosk/map.html).
+          - type: custom:button-card
+            entity: device_tracker.a35_martin
+            show_icon: false
+            show_name: false
+            show_state: false
+            tap_action:
+              action: none
+            custom_fields:
+              map: |
+                [[[
+                  const a = entity.attributes, h = (states['zone.home'] || {}).attributes || {};
+                  const qs = new URLSearchParams({
+                    lat: a.latitude ?? '', lon: a.longitude ?? '', acc: a.gps_accuracy ?? '',
+                    hlat: h.latitude ?? '', hlon: h.longitude ?? '', label: 'M',
+                  });
+                  return `<iframe src="/local/kiosk/map.html?${qs}" loading="lazy"></iframe>`;
+                ]]]
+            styles:
+              card:
+                - padding: 0
+                - overflow: hidden
+                - height: calc(100vh - 161px)
+                - min-height: 240px
+              grid:
+                - grid-template-areas: '"map"'
+                - height: 100%
+              custom_fields:
+                map:
+                  - height: 100%
+                  - pointer-events: auto
+            extra_styles: |
+              iframe { display: block; width: 100%; height: 100%; border: 0; }
+
+  # Opened from the Sun tile on Overview.
+  - title: Sun
+    path: sun
+    subview: true
+    type: custom:grid-layout
+    theme: MRTN Kiosk
+    layout: *layout
+    cards:
+      - *sidebar
+      - type: custom:layout-card
+        layout_type: custom:grid-layout
+        layout: *main_layout
+        view_layout:
+          grid-area: main
+        cards:
+          - type: custom:button-card
+            template: fusion_tabs
+            variables:
+              active: sun
+          - type: custom:button-card
+            template: fusion_title
+            entity: sun.sun
+            name: |
+              [[[ return `Sun · ${{above_horizon: 'Above horizon', below_horizon: 'Below horizon'}[entity.state] || entity.state}`; ]]]
+          # Day arc: sunrise on the left, sunset on the right, the sun at its
+          # current spot. At night it shows the next sunrise instead.
+          - type: custom:button-card
+            entity: sun.sun
+            show_icon: false
+            show_name: false
+            show_state: false
+            tap_action:
+              action: none
+            triggers_update: all
+            custom_fields:
+              arc: |
+                [[[
+                  const t = id => new Date((states[id] || {}).state).getTime();
+                  const now = Date.now(), day = 864e5;
+                  const nextRise = t('sensor.sun_next_rising'), nextSet = t('sensor.sun_next_setting');
+                  const up = entity.state === 'above_horizon';
+                  const rise = up ? nextRise - day : nextRise;
+                  // Below the horizon the next sunrise and sunset are the same (upcoming) day.
+                  const set = nextSet;
+                  const hm = ms => isNaN(ms) ? '--:--' : new Date(ms).toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'});
+                  const W = 600, H = 210, cx = 300, by = 180, rx = 250, ry = 150;
+                  const pt = f => [cx - rx * Math.cos(Math.PI * f), by - ry * Math.sin(Math.PI * f)];
+                  const path = (f0, f1) => {
+                    let d = '';
+                    for (let i = 0; i <= 60; i++) {
+                      const [x, y] = pt(f0 + (f1 - f0) * i / 60);
+                      d += `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`;
+                    }
+                    return d;
+                  };
+                  const f = up ? Math.min(1, Math.max(0, (now - rise) / (set - rise))) : null;
+                  const elev = entity.attributes.elevation;
+                  let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%">` +
+                    `<line x1="20" y1="${by}" x2="${W - 20}" y2="${by}" stroke="rgba(255,255,255,0.25)" stroke-width="1"/>` +
+                    `<path d="${path(0, 1)}" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="2" stroke-dasharray="4 6"/>`;
+                  if (up) {
+                    const [sx, sy] = pt(f);
+                    svg += `<path d="${path(0, f)}" fill="none" stroke="rgb(242,196,107)" stroke-width="3"/>` +
+                      `<circle cx="${sx}" cy="${sy}" r="16" fill="rgba(242,196,107,0.25)"/>` +
+                      `<circle cx="${sx}" cy="${sy}" r="9" fill="rgb(242,196,107)"/>`;
+                  }
+                  svg += `<text x="${cx - rx}" y="${by + 24}" text-anchor="middle">${hm(rise)}</text>` +
+                    `<text x="${cx + rx}" y="${by + 24}" text-anchor="middle">${hm(set)}</text>` +
+                    `<text x="${cx}" y="${by - 40}" text-anchor="middle" class="big">` +
+                    (up ? `${elev !== undefined ? Math.round(elev) + '° high' : ''}` : `Sunrise ${hm(nextRise)}`) + `</text></svg>`;
+                  return svg;
+                ]]]
+            styles:
+              card:
+                - padding: 12px 16px 8px
+              grid:
+                - grid-template-areas: '"arc"'
+              custom_fields:
+                arc:
+                  - justify-self: stretch
+            extra_styles: |
+              svg text { fill: rgba(255, 255, 255, 0.7); font: 500 15px "Inter Variable", system-ui; }
+              svg text.big { fill: rgba(255, 255, 255, 0.9); font-size: 26px; font-weight: 600; }
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout:
+              <<: *tiles_layout
+              margin: 9.6px 0 0
+            cards:
+              - type: custom:button-card
+                template: fusion_time
+                entity: sensor.sun_next_dawn
+                name: Dawn
+                icon: mdi:weather-sunset-up
+              - type: custom:button-card
+                template: fusion_time
+                entity: sensor.sun_next_rising
+                name: Sunrise
+                icon: mdi:weather-sunset-up
+              - type: custom:button-card
+                template: fusion_time
+                entity: sensor.sun_next_noon
+                name: Noon
+                icon: mdi:white-balance-sunny
+              - type: custom:button-card
+                template: fusion_time
+                entity: sensor.sun_next_setting
+                name: Sunset
+                icon: mdi:weather-sunset-down
+              - type: custom:button-card
+                template: fusion_time
+                entity: sensor.sun_next_dusk
+                name: Dusk
+                icon: mdi:weather-sunset-down
+              - type: custom:button-card
+                template: fusion_tile
+                entity: sun.sun
+                name: Elevation
+                icon: mdi:angle-acute
+                state_display: |
+                  [[[ const e = entity.attributes.elevation; return e === undefined ? '-' : `${Math.round(e * 10) / 10}°`; ]]]
+
+  # Opened from the Stopwatch tile on Overview.
+  - title: Stopwatch
+    path: stopwatch
+    subview: true
+    type: custom:grid-layout
+    theme: MRTN Kiosk
+    layout: *layout
+    cards:
+      - *sidebar
+      - type: custom:layout-card
+        layout_type: custom:grid-layout
+        layout: *main_layout
+        view_layout:
+          grid-area: main
+        cards:
+          - type: custom:button-card
+            template: fusion_tabs
+            variables:
+              active: stopwatch
+          - type: custom:button-card
+            template: fusion_title
+            name: Stopwatch
+          - type: custom:button-card
+            template: sw_engine
+            show_icon: false
+            show_name: false
+            show_state: false
+            tap_action:
+              action: none
+            custom_fields:
+              ui: |
+                [[[
+                  const sw = window.__sw;
+                  const stop = 'event.stopPropagation()';
+                  const btn = (cls, icon, label, fn) =>
+                    `<span class="btn ${cls}" onpointerup="${stop};window.__sw.${fn}()" onclick="${stop}" ` +
+                    `onmousedown="${stop}" ontouchstart="${stop}" ontouchend="${stop}">` +
+                    `<ha-icon icon="${icon}"></ha-icon><span>${label}</span></span>`;
+                  return `<div class="wrap">` +
+                    `<div class="swt fine big">${sw ? sw.fmt(sw.ms(), true) : '00:00.0'}</div>` +
+                    `<div class="btns">` +
+                    btn('swp main', sw && sw.start ? 'mdi:pause' : 'mdi:play', 'Start / Pause', 'toggle') +
+                    btn('', 'mdi:flag-outline', 'Lap', 'lap') +
+                    btn('', 'mdi:restore', 'Reset', 'reset') +
+                    `</div><div class="swlaps">${sw ? sw.lapsHtml() : ''}</div></div>`;
+                ]]]
+            # Fills the rest of the screen under the title (same as the map).
+            styles:
+              card:
+                - padding: 20px 16px
+                - height: calc(100vh - 161px)
+                - min-height: 300px
+                - box-sizing: border-box
+              grid:
+                - grid-template-areas: '"ui"'
+                - grid-template-rows: 100%
+                - height: 100%
+              custom_fields:
+                ui:
+                  - justify-self: stretch
+                  - align-self: stretch
+                  - height: 100%
+                  - min-height: 0
+                  - pointer-events: auto
+            extra_styles: |
+              .wrap {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: 28px;
+                height: 100%;
+              }
+              .big {
+                font-size: clamp(72px, 13vw, 180px);
+                font-weight: 500;
+                line-height: 1;
+                font-variant-numeric: tabular-nums;
+                color: rgba(255, 255, 255, 0.9);
+              }
+              .btns { display: flex; gap: 16px; }
+              .btn {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                height: 72px;
+                padding: 0 28px;
+                border-radius: 10.4px;
+                background: rgba(255, 255, 255, 0.08);
+                color: rgba(255, 255, 255, 0.85);
+                font-size: 18px;
+                font-weight: 500;
+                cursor: pointer;
+                pointer-events: auto;
+                touch-action: manipulation;
+                -webkit-tap-highlight-color: transparent;
+                user-select: none;
+              }
+              .btn ha-icon { --mdc-icon-size: 28px; width: 28px; height: 28px; display: flex; }
+              .btn.main { background: rgba(255, 255, 255, 0.85); color: rgb(48, 51, 52); }
+              .btn:active { filter: brightness(1.3); }
+              .swlaps { width: 100%; max-width: 520px; flex: 0 1 auto; min-height: 0; overflow-y: auto; }
+              .lap {
+                display: flex;
+                justify-content: space-between;
+                padding: 6px 4px;
+                border-top: 1px solid rgba(255, 255, 255, 0.08);
+                font-size: 15px;
+                font-variant-numeric: tabular-nums;
+                color: rgba(255, 255, 255, 0.7);
+              }
+
+  # Settings of the kiosk/light automations (packages/kiosk.yaml) and an on/off
+  # list of every automation in HA. Tap a value to change it.
+  - title: Automations
+    path: automations
+    type: custom:grid-layout
+    theme: MRTN Kiosk
+    layout: *layout
+    cards:
+      - *sidebar
+      - type: custom:layout-card
+        layout_type: custom:grid-layout
+        layout: *main_layout
+        view_layout:
+          grid-area: main
+        cards:
+          - type: custom:button-card
+            template: fusion_tabs
+            variables:
+              active: automations
+          - type: custom:button-card
+            template: fusion_title
+            name: Kiosk
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout: *tiles_layout
+            cards:
+              - type: custom:button-card
+                template: fusion_tile
+                entity: input_datetime.kiosk_noche_inicio
+                name: Night from
+              - type: custom:button-card
+                template: fusion_tile
+                entity: input_number.kiosk_brillo_noche
+                name: Night brightness
+              - type: custom:button-card
+                template: fusion_tile
+                entity: input_datetime.kiosk_dia_inicio
+                name: Day from
+              - type: custom:button-card
+                template: fusion_tile
+                entity: input_number.kiosk_brillo_dia
+                name: Day brightness
+              - type: custom:button-card
+                template: fusion_tile
+                entity: input_number.kiosk_inactividad_min
+                name: Back to Overview
+          - type: custom:button-card
+            template: fusion_title_next
+            name: Lights
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout: *tiles_layout
+            cards:
+              - type: custom:button-card
+                template: fusion_tile
+                entity: input_datetime.luces_atenuar_hora
+                name: Dim from
+              - type: custom:button-card
+                template: fusion_tile
+                entity: input_number.luces_atenuar_brillo
+                name: Dim to
+              - type: custom:button-card
+                template: fusion_tile
+                entity: input_datetime.luces_apagar_hora
+                name: Off at
+              # Lights with the "Auto lights" label (the ones these automations control).
+              - type: custom:button-card
+                template: fusion_tile
+                name: Auto lights
+                icon: mdi:lightbulb-auto
+                show_state: false
+                tap_action: { action: none }
+                triggers_update: all
+                custom_fields:
+                  s: |
+                    [[[
+                      const n = Object.values(hass.entities || {})
+                        .filter(e => e.entity_id.startsWith('light.') && (e.labels || []).includes('auto_lights')).length;
+                      return `${n} light${n === 1 ? '' : 's'}`;
+                    ]]]
+                styles:
+                  custom_fields:
+                    s:
+                      - justify-self: start
+                      - align-self: start
+                      - padding-right: 11.52px
+                      - font-size: 14.8px
+                      - line-height: 18px
+                      - color: rgba(255, 255, 255, 0.7)
+          - type: custom:button-card
+            template: fusion_title_next
+            name: Automations
+          # Every automation in HA, built at render time: new ones show up on their own.
+          # Tap to enable/disable.
+          - type: custom:button-card
+            show_icon: false
+            show_name: false
+            show_state: false
+            tap_action:
+              action: none
+            triggers_update: all
+            custom_fields:
+              list: |
+                [[[
+                  const esc = v => String(v).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+                  const ago = t => {
+                    if (!t) return 'never ran';
+                    const m = Math.floor((Date.now() - new Date(t).getTime()) / 6e4);
+                    if (m < 1) return 'ran just now';
+                    if (m < 60) return `ran ${m} min ago`;
+                    if (m < 1440) return `ran ${Math.floor(m / 60)} h ago`;
+                    return `ran ${Math.floor(m / 1440)} d ago`;
+                  };
+                  const autos = Object.values(states)
+                    .filter(a => a.entity_id.startsWith('automation.'))
+                    .sort((a, b) => (a.attributes.friendly_name || '').localeCompare(b.attributes.friendly_name || ''));
+                  const call = id => `(this.getRootNode().host.hass||document.querySelector('home-assistant').hass)` +
+                    `.callService('automation','toggle',{entity_id:'${id}'})`;
+                  const stop = 'event.stopPropagation()';
+                  return '<div class="grid">' + autos.map(a => {
+                    const on = a.state === 'on';
+                    return `<div class="t ${on ? 'on' : ''}" onpointerup="${stop};${call(a.entity_id)}" onclick="${stop}" ` +
+                      `onmousedown="${stop}" ontouchstart="${stop}" ontouchend="${stop}">` +
+                      `<div class="i"><ha-icon icon="${on ? 'mdi:robot' : 'mdi:robot-off-outline'}"></ha-icon></div>` +
+                      `<div class="r"><div class="n">${esc(a.attributes.friendly_name || a.entity_id)}</div>` +
+                      `<div class="s">${on ? 'on' : 'off'} · ${ago(a.attributes.last_triggered)}</div></div></div>`;
+                  }).join('') + '</div>';
+                ]]]
+            styles:
+              card:
+                - background: none
+                - padding: 0
+                - overflow: visible
+              grid:
+                - grid-template-areas: '"list"'
+              custom_fields:
+                list:
+                  - justify-self: stretch
+                  - pointer-events: auto
+            extra_styles: |
+              .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 9.6px; }
+              .t {
+                display: flex;
+                align-items: center;
+                height: 61px;
+                border-radius: 10.4px;
+                background: rgba(0, 0, 0, 0.15);
+                font-family: "Inter Variable", system-ui;
+                cursor: pointer;
+                pointer-events: auto;
+                touch-action: manipulation;
+                -webkit-tap-highlight-color: transparent;
+                user-select: none;
+                opacity: 0.55;
+              }
+              .t.on { opacity: 1; }
+              .t:active { filter: brightness(1.3); }
+              .i {
+                flex: 0 0 61px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+              }
+              .i ha-icon {
+                --mdc-icon-size: 22px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: 38px;
+                height: 38px;
+                border-radius: 50%;
+                color: #fff;
+              }
+              .t.on .i ha-icon { background: rgb(131, 129, 124); }
+              .r { min-width: 0; padding-right: 11.52px; text-align: left; }
+              .n {
+                font-size: 15.2px;
+                font-weight: 500;
+                line-height: 19px;
+                color: #fff;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+              }
+              .s { font-size: 14.8px; line-height: 18px; color: rgba(255, 255, 255, 0.7); }

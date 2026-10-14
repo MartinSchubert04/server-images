@@ -1,0 +1,165 @@
+# Automatizaciones del kiosco (MRTN-HUB) y de las luces smart.
+#
+# Todos los horarios y porcentajes son helpers: se cambian desde la pestaña Automations del kiosco
+# (tocando cada valor) o en Ajustes → Dispositivos y servicios → Ayudantes. Los helpers no tienen
+# "initial" a propósito: así Home Assistant guarda el último valor elegido y no lo pisa al reiniciar.
+#
+# Las luces se eligen con la etiqueta "Auto lights" (label_id auto_lights): para sumar una luz nueva
+# a estas automatizaciones, alcanza con ponerle esa etiqueta en Ajustes → Entidades.
+
+input_datetime:
+  kiosk_noche_inicio:
+    name: "Kiosco: empieza la noche"
+    icon: mdi:weather-night
+    has_date: false
+    has_time: true
+  kiosk_dia_inicio:
+    name: "Kiosco: empieza el día"
+    icon: mdi:weather-sunny
+    has_date: false
+    has_time: true
+  luces_atenuar_hora:
+    name: "Luces: atenuar desde"
+    icon: mdi:lightbulb-on-50
+    has_date: false
+    has_time: true
+  luces_apagar_hora:
+    name: "Luces: apagar a las"
+    icon: mdi:lightbulb-off-outline
+    has_date: false
+    has_time: true
+
+input_number:
+  kiosk_brillo_noche:
+    name: "Kiosco: brillo de noche"
+    icon: mdi:brightness-4
+    min: 5
+    max: 100
+    step: 5
+    unit_of_measurement: "%"
+    mode: slider
+  kiosk_brillo_dia:
+    name: "Kiosco: brillo de día"
+    icon: mdi:brightness-7
+    min: 5
+    max: 100
+    step: 5
+    unit_of_measurement: "%"
+    mode: slider
+  kiosk_inactividad_min:
+    name: "Kiosco: volver a Overview tras"
+    icon: mdi:timer-sand
+    min: 1
+    max: 60
+    step: 1
+    unit_of_measurement: "min"
+    mode: slider
+  luces_atenuar_brillo:
+    name: "Luces: brillo atenuado"
+    icon: mdi:brightness-6
+    min: 5
+    max: 100
+    step: 5
+    unit_of_measurement: "%"
+    mode: slider
+
+automation:
+  # Brillo de la pantalla del kiosco según la hora
+  - id: kiosk_brillo_nocturno
+    alias: "Kiosco: brillo de noche y de día"
+    mode: single
+    trigger:
+      - platform: time
+        at: input_datetime.kiosk_noche_inicio
+        id: noche
+      - platform: time
+        at: input_datetime.kiosk_dia_inicio
+        id: dia
+    action:
+      - service: light.turn_on
+        target:
+          entity_id: light.touchkio_mrtn_hub_display
+        data:
+          brightness_pct: >-
+            {{ states('input_number.kiosk_brillo_noche' if trigger.id == 'noche' else 'input_number.kiosk_brillo_dia') | int(50) }}
+
+  # Si nadie toca la pantalla un rato, el kiosco vuelve a su página de inicio (Overview).
+  # last_active son los minutos desde el último toque; dispara una vez al pasar el umbral.
+  # El botón "refresh" de TouchKio recarga la página actual (no la de inicio). En cambio, al
+  # escribirle una URL a text.touchkio_..._page_url, TouchKio la carga: se le manda Overview con
+  # el mismo host que ya usa la Pi. Se manda siempre (no se mira si ya está en Overview) porque
+  # las pestañas cambian sin recargar la página y ese estado puede no enterarse.
+  - id: kiosk_volver_overview
+    alias: "Kiosco: volver a Overview por inactividad"
+    mode: single
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.touchkio_mrtn_hub_last_active
+        above: input_number.kiosk_inactividad_min
+    variables:
+      actual: "{{ states('text.touchkio_mrtn_hub_page_url') }}"
+      overview: "{{ actual | regex_replace('^(https?://[^/]+).*$', '\\\\1') }}/dashboard-kiosk/overview#overview"
+    condition:
+      - condition: template
+        value_template: "{{ actual.startswith('http') }}"
+    action:
+      - service: text.set_value
+        target:
+          entity_id: text.touchkio_mrtn_hub_page_url
+        data:
+          value: "{{ overview }}"
+
+  # Desde la hora de atenuar hasta la de apagar, las luces "Auto lights" van al brillo atenuado:
+  # las que están prendidas al empezar, y las que se prenden durante ese rato. Si después las
+  # subís a mano, no las vuelve a bajar.
+  - id: luces_atenuar_noche
+    alias: "Luces: atenuar de noche"
+    mode: queued
+    trigger:
+      - platform: time
+        at: input_datetime.luces_atenuar_hora
+        id: hora
+      - platform: event
+        event_type: state_changed
+        id: prendida
+    condition:
+      - condition: template
+        value_template: >-
+          {% set ini = today_at(states('input_datetime.luces_atenuar_hora')) %}
+          {% set fin = today_at(states('input_datetime.luces_apagar_hora')) %}
+          {% set ahora = now() %}
+          {% set en_horario = (ahora >= ini or ahora < fin) if fin <= ini else (ini <= ahora < fin) %}
+          {% if trigger.id == 'hora' %}
+            {{ label_entities('auto_lights') | select('match', 'light\.') | select('is_state', 'on') | list | count > 0 }}
+          {% else %}
+            {% set e = trigger.event.data %}
+            {{ en_horario
+               and e.entity_id in label_entities('auto_lights')
+               and e.new_state is not none and e.new_state.state == 'on'
+               and (e.old_state is none or e.old_state.state != 'on') }}
+          {% endif %}
+    action:
+      - service: light.turn_on
+        target:
+          entity_id: >-
+            {% if trigger.id == 'hora' %}
+              {{ label_entities('auto_lights') | select('match', 'light\.') | select('is_state', 'on') | list }}
+            {% else %}
+              {{ [trigger.event.data.entity_id] }}
+            {% endif %}
+        data:
+          brightness_pct: "{{ states('input_number.luces_atenuar_brillo') | int(60) }}"
+
+  - id: luces_apagar_noche
+    alias: "Luces: apagar de noche"
+    mode: single
+    trigger:
+      - platform: time
+        at: input_datetime.luces_apagar_hora
+    condition:
+      - condition: template
+        value_template: "{{ label_entities('auto_lights') | select('match', 'light\\.') | select('is_state', 'on') | list | count > 0 }}"
+    action:
+      - service: light.turn_off
+        target:
+          entity_id: "{{ label_entities('auto_lights') | select('match', 'light\\.') | select('is_state', 'on') | list }}"

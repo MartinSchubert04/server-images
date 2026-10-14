@@ -1,0 +1,74 @@
+<!doctype html>
+<!--
+  Kiosk map (ha-fusion style: MapTiler streets-v2-dark). Shown in an iframe on
+  the kiosk "map" view: map.html?lat=..&lon=..&acc=..&hlat=..&hlon=..&label=M
+  __MAPTILER_KEY__ is replaced with the key from ha-fusion/configuration.yaml
+  when copied to /config/www/kiosk/ (the key never goes into git).
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kiosk map</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    html, body, #map { margin: 0; height: 100%; background: #1d2328; }
+    .leaflet-control-attribution { font-size: 9px; background: rgba(0, 0, 0, 0.4) !important; color: #aaa; }
+    .leaflet-control-attribution a { color: #ccc; }
+    .leaflet-bar a { background: rgba(29, 35, 40, 0.9); color: #e8e8e8; border-color: rgba(255, 255, 255, 0.1); }
+    .pin {
+      width: 38px; height: 38px; border-radius: 50%;
+      background: rgb(75, 166, 237); color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font: 600 16px "Inter Variable", system-ui, sans-serif;
+      box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.85);
+    }
+    .home {
+      width: 26px; height: 26px; border-radius: 50%;
+      background: rgba(255, 255, 255, 0.85);
+      display: flex; align-items: center; justify-content: center;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    const q = new URLSearchParams(location.search);
+    const num = k => (q.has(k) && q.get(k) !== '' ? Number(q.get(k)) : NaN);
+    const lat = num('lat'), lon = num('lon'), acc = num('acc');
+    const hlat = num('hlat'), hlon = num('hlon');
+
+    const map = L.map('map', { zoomControl: false, attributionControl: true });
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+    L.tileLayer('https://api.maptiler.com/maps/streets-v2-dark/256/{z}/{x}/{y}.png?key=__MAPTILER_KEY__', {
+      maxZoom: 20,
+      attribution: '&copy; MapTiler &copy; OpenStreetMap contributors',
+    }).addTo(map);
+
+    if (!isNaN(hlat) && !isNaN(hlon)) {
+      const homeIcon = L.divIcon({
+        className: '',
+        iconSize: [26, 26],
+        html: '<div class="home"><svg width="16" height="16" viewBox="0 0 24 24"><path fill="#303334" d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg></div>',
+      });
+      L.marker([hlat, hlon], { icon: homeIcon, interactive: false }).addTo(map);
+    }
+    if (!isNaN(lat) && !isNaN(lon)) {
+      if (!isNaN(acc) && acc > 0) {
+        L.circle([lat, lon], { radius: acc, color: 'rgb(75,166,237)', weight: 1, fillOpacity: 0.12 }).addTo(map);
+      }
+      const label = (q.get('label') || '').slice(0, 2);
+      L.marker([lat, lon], {
+        icon: L.divIcon({ className: '', iconSize: [38, 38], html: `<div class="pin">${label.replace(/[<>&"]/g, '')}</div>` }),
+        interactive: false,
+      }).addTo(map);
+      map.setView([lat, lon], 16);
+    } else if (!isNaN(hlat) && !isNaN(hlon)) {
+      map.setView([hlat, hlon], 15);
+    } else {
+      map.setView([0, 0], 2);
+    }
+  </script>
+</body>
+</html>

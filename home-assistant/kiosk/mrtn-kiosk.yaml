@@ -1,0 +1,80 @@
+# Muted dark theme for the MRTN-HUB kiosk (mimics ha-fusion "muted").
+# Copied into /config/themes/ in the homeassistant container.
+MRTN Kiosk:
+  # Background
+  lovelace-background: 'center / cover no-repeat url("/local/kiosk/muted_background.webp") fixed #000'
+
+  # Font (Inter Variable, loaded by /local/kiosk/kiosk.css)
+  primary-font-family: '"Inter Variable", system-ui'
+  paper-font-common-base_-_font-family: '"Inter Variable", system-ui'
+  ha-font-family-body: '"Inter Variable", system-ui'
+  ha-font-family-heading: '"Inter Variable", system-ui'
+  primary-background-color: "#161b1f"
+  secondary-background-color: "#1d2328"
+
+  # Text
+  primary-text-color: "#e8e8e8"
+  secondary-text-color: "#9aa0a6"
+  disabled-text-color: "#5f666c"
+  text-primary-color: "#e8e8e8"
+
+  # Accents
+  primary-color: "#e8e8e8"
+  accent-color: "#4aa3f0"
+  state-icon-color: "#9aa0a6"
+  state-active-color: "#f2c46b"
+
+  # Spacing is set per card in the kiosk dashboard (pixel match with ha-fusion)
+  masonry-view-card-margin: "0px"
+  vertical-stack-card-gap: "0px"
+  horizontal-stack-card-gap: "0px"
+
+  # Cards: any card (native or HACS) gets ha-fusion's tile surface, so new
+  # graphs, gauges, maps etc. match the fusion buttons without extra styling.
+  ha-card-background: "rgba(0, 0, 0, 0.15)"
+  # Opaque: also used by popups and dropdowns, which must not be see-through.
+  card-background-color: "#1d2328"
+  ha-card-border-radius: "10.4px"
+  ha-card-border-width: "0px"
+  ha-card-box-shadow: "none"
+  divider-color: "rgba(255, 255, 255, 0.08)"
+
+  # Card titles (history-graph, entities...) and heading cards
+  ha-card-header-color: "rgba(255, 255, 255, 0.8)"
+  ha-card-header-font-family: '"Inter Variable", system-ui'
+  ha-card-header-font-size: "16px"
+  ha-heading-card-title-font-size: "28.8px"
+  ha-heading-card-title-font-weight: "600"
+  ha-heading-card-title-color: "rgba(255, 255, 255, 0.8)"
+  ha-heading-card-subtitle-font-size: "18.24px"
+  ha-heading-card-subtitle-font-weight: "700"
+  ha-heading-card-subtitle-color: "rgba(255, 255, 255, 0.4)"
+
+  # Graph series colors (history, statistics, energy): white first like the
+  # fusion sidebar graph, then the fusion accents.
+  graph-color-1: "rgba(255, 255, 255, 0.85)"
+  graph-color-2: "rgb(75, 166, 237)"
+  graph-color-3: "rgb(242, 196, 107)"
+  graph-color-4: "rgb(131, 129, 124)"
+  graph-color-5: "rgb(130, 200, 150)"
+  graph-color-6: "rgb(230, 120, 120)"
+
+  # Header (view tabs)
+  app-header-background-color: "transparent"
+  app-header-text-color: "#e8e8e8"
+  app-header-selection-bar-color: "#e8e8e8"
+  app-header-border-bottom: "none"
+
+  # Sidebar
+  sidebar-background-color: "#12171b"
+  sidebar-text-color: "#9aa0a6"
+  sidebar-selected-text-color: "#e8e8e8"
+  sidebar-selected-icon-color: "#e8e8e8"
+
+  # Tile cards
+  tile-color: "rgba(255, 255, 255, 0.06)"
+
+  # Inputs / dialogs
+  mdc-theme-primary: "#e8e8e8"
+  ha-dialog-surface-background: "#1d2328"
+  input-fill-color: "rgba(255, 255, 255, 0.06)"

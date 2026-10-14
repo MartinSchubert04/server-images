@@ -26,3 +26,7 @@ home-assistant/mosquitto/data/
 home-assistant/frigate/config/*
 !home-assistant/frigate/config/config.yaml
 home-assistant/frigate/media/
+home-assistant/mosquitto/config/passwd
+
+# ha-fusion: configuration.yaml holds an HA long-lived token
+home-assistant/ha-fusion/
