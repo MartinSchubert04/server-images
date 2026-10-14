@@ -1,6 +1,6 @@
 """Builds the dashboards that are generated rather than drawn by hand:
 
-- "Home": the general overviews as tabs (Scriptorium, Network, Lights, Energy, Security).
+- "Home": the general overviews as tabs (Overview, Weather, Traffic, Network, Lights, Energy, Security).
 - One dashboard per sector (Bedroom, Living, Kitchen), filled by Home Assistant from the area.
 
 Dashboards made in the UI are left untouched. Home Assistant keeps storage dashboards in memory, so
@@ -11,6 +11,7 @@ run this on a copy of /config/.storage taken while the container is stopped:
 
 import json
 import sys
+import uuid
 from pathlib import Path
 
 storage = Path(sys.argv[1])
@@ -124,6 +125,137 @@ energy = {
     ],
 }
 
+# ----- Weather: Open-Meteo through packages/clima.yaml, plus the BMP280 on the desk
+# The two cards are not from HACS: download them into /config/www/weather-cards from
+#   https://github.com/troinine/ha-weather-forecast-card/releases/latest/download/weather-forecast-card.js
+#   https://github.com/timmaurice/lovelace-windy-card/releases/latest/download/windy-card.js
+WEATHER_CARDS = ["weather-forecast-card.js", "windy-card.js"]
+
+
+def windy(overlay: str, **extra) -> dict:
+    return {"type": "custom:windy-card", "location": "zone.home", "overlay": overlay, "zoom": 7, "height": 420, "metric_wind": "km/h", "show_marker": True, "hide_message": True, "grid_options": {"columns": "full"}, **extra}
+
+
+weather = {
+    "title": "Weather",
+    "path": "weather",
+    "type": "sections",
+    "max_columns": 4,
+    "sections": [
+        section(
+            heading("Now"),
+            {
+                "type": "custom:weather-forecast-card",
+                "entity": "weather.clima",
+                "show_condition_effects": True,
+                "default_forecast": "hourly",
+                "forecast": {"mode": "chart", "extra_attribute": "precipitation_probability", "show_attribute_selector": True},
+                "grid_options": {"columns": "full", "rows": "auto"},
+            },
+            span=2,
+        ),
+        section(
+            heading("Conditions"),
+            tile("sensor.clima_sensacion_termica", "Sensación térmica", icon="mdi:thermometer-lines"),
+            tile("sensor.clima_humedad", "Humedad"),
+            tile("sensor.clima_viento", "Viento", icon="mdi:weather-windy"),
+            tile("sensor.clima_rafagas", "Ráfagas", icon="mdi:weather-windy-variant"),
+            tile("sensor.clima_precipitacion", "Lluvia ahora", icon="mdi:weather-pouring"),
+            tile("sensor.clima_nubosidad", "Nubosidad"),
+            tile("sensor.clima_indice_uv", "Índice UV"),
+            tile("sensor.clima_visibilidad", "Visibilidad", icon="mdi:eye-outline"),
+            tile("sensor.clima_punto_de_rocio", "Punto de rocío", icon="mdi:water-thermometer-outline"),
+            tile("sensor.clima_presion", "Presión", icon="mdi:gauge"),
+        ),
+        section(
+            heading("Air & Sun"),
+            tile("sensor.clima_calidad_del_aire", "Calidad del aire", 12, icon="mdi:air-filter"),
+            tile("sensor.clima_pm2_5", "PM2.5"),
+            tile("sensor.clima_pm10", "PM10"),
+            tile("sensor.sun_next_rising", "Amanecer", icon="mdi:weather-sunset-up"),
+            tile("sensor.sun_next_setting", "Atardecer", icon="mdi:weather-sunset-down"),
+            heading("Station", "subtitle"),
+            tile("sensor.bmp280_esp32_c3_temperatura", "Adentro", features=[{"type": "trend-graph", "hours_to_show": 24}]),
+            tile("sensor.bmp280_esp32_c3_presion", "Barómetro", features=[{"type": "trend-graph", "hours_to_show": 24}]),
+        ),
+        section(heading("Radar"), windy("radar"), span=2),
+        section(heading("Wind"), windy("wind", show_pressure=True), span=2),
+        section(
+            heading("Week"),
+            {
+                "type": "custom:weather-forecast-card",
+                "entity": "weather.clima",
+                "show_current": False,
+                "forecast_types": "daily",
+                "forecast": {"extra_attribute": "precipitation_probability"},
+                "grid_options": {"columns": "full", "rows": "auto"},
+            },
+            span=2,
+        ),
+        section(
+            heading("Trends"),
+            {"type": "history-graph", "title": "Temperatura (48 h)", "hours_to_show": 48, "entities": [{"entity": "sensor.clima_temperatura", "name": "Afuera"}, {"entity": "sensor.clima_sensacion_termica", "name": "Sensación"}, {"entity": "sensor.bmp280_esp32_c3_temperatura", "name": "Adentro"}]},
+            {"type": "history-graph", "title": "Presión (48 h)", "hours_to_show": 48, "entities": [{"entity": "sensor.bmp280_esp32_c3_presion", "name": "Barómetro"}, {"entity": "sensor.clima_presion", "name": "Nivel del mar"}]},
+            span=2,
+        ),
+    ],
+}
+# ----- Traffic: Waze's live map (jams, accidents, closures), the default route of packages/ruta.yaml
+# (TomTom, by motorcycle, with live traffic) and what the weather does to the road
+# The maps are centred on the house, rounded to about a kilometre: the address is not Waze's business
+home = json.loads((storage / "core.config").read_text(encoding="utf-8"))["data"]
+CASA = (round(home["latitude"], 2), round(home["longitude"], 2))
+CENTRO = (-34.6037, -58.3816)  # Obelisco
+
+
+def waze_map(rows: int, zoom: int = 12, centre: tuple[float, float] = CASA) -> dict:
+    url = f"https://embed.waze.com/iframe?zoom={zoom}&lat={centre[0]}&lon={centre[1]}&ct=livemap"
+    return {"type": "iframe", "url": url, "aspect_ratio": "60%", "grid_options": {"columns": "full", "rows": rows}}
+
+
+ROAD = [
+    tile("sensor.clima_precipitacion", "Lluvia ahora", icon="mdi:weather-pouring"),
+    tile("sensor.clima_visibilidad", "Visibilidad", icon="mdi:eye-outline"),
+    tile("sensor.clima_viento", "Viento", icon="mdi:weather-windy"),
+    tile("sensor.clima_rafagas", "Ráfagas", icon="mdi:weather-windy-variant"),
+]
+
+RUTA = [
+    tile("sensor.ruta_tiempo", "Ruta en moto", icon="mdi:motorbike", features=[{"type": "trend-graph", "hours_to_show": 24}]),
+    tile("sensor.ruta_demora", "Demora por tráfico", icon="mdi:car-brake-alert", features=[{"type": "trend-graph", "hours_to_show": 24}]),
+    tile("sensor.ruta_distancia", "Distancia", 12, icon="mdi:map-marker-distance"),
+    tile("sensor.ruta_en_moto", "Para salir en moto", 12, state_content=["state", "motivo"]),
+]
+# Where the two addresses landed, and the same trip in the maps that do know the traffic
+RUTA_LINKS = """{% set o = states('input_text.ruta_origen') %}{% set d = states('input_text.ruta_destino') %}{% set ll = states('sensor.ruta_destino').split(',') -%}
+**{{ o }}** → **{{ d }}**
+
+Abrir en [Google Maps](https://www.google.com/maps/dir/?api=1&origin={{ o | urlencode }}&destination={{ d | urlencode }}&travelmode=driving){% if ll | count == 2 %} · [Waze](https://www.waze.com/ul?ll={{ ll[0] }}%2C{{ ll[1] }}&navigate=yes){% endif %}"""
+RUTA_GEO = """Origen: {{ state_attr('sensor.ruta_origen', 'display_name') or 'dirección no encontrada' }}
+
+Destino: {{ state_attr('sensor.ruta_destino', 'display_name') or 'dirección no encontrada' }}"""
+
+traffic = {
+    "title": "Traffic",
+    "path": "traffic",
+    "type": "sections",
+    "max_columns": 4,
+    "sections": [
+        section(heading("Live map"), waze_map(9), span=3),
+        section(
+            heading("Route"),
+            *RUTA,
+            {"type": "markdown", "content": RUTA_LINKS},
+            heading("Addresses", "subtitle"),
+            {"type": "entities", "entities": ["input_text.ruta_origen", "input_text.ruta_destino"]},
+            {"type": "markdown", "content": RUTA_GEO},
+        ),
+        section(heading("On the road"), *ROAD, tile("sensor.sun_next_setting", "Atardecer", 12, icon="mdi:weather-sunset-down")),
+        section(heading("Neighbourhood"), waze_map(7, zoom=14), span=2),
+        section(heading("City"), waze_map(7, centre=CENTRO), span=2),
+    ],
+}
+
 # ----- Home
 registry_path = storage / "lovelace_dashboards"
 registry = json.loads(registry_path.read_text(encoding="utf-8"))
@@ -137,10 +269,10 @@ def first_view(dash_id: str) -> dict | None:
     return dict(views[0]) if views else None
 
 
-# The first room: a masthead (plate, name, almanac) and the handful of things worth a glance
+# The general panel: a masthead (plate, name, almanac) and the handful of things worth a glance
 views = [{
-    "title": "Scriptorium",
-    "path": "scriptorium",
+    "title": "Overview",
+    "path": "overview",
     "type": "sections",
     "max_columns": 4,
     "sections": [
@@ -166,6 +298,21 @@ views = [{
             tile("sensor.server_costo_mes", "Server, mes"),
             tile("sensor.pc_main_costo_mes", "PC main, mes"),
         ),
+        section(
+            heading("Weather"),
+            {
+                "type": "custom:weather-forecast-card",
+                "entity": "weather.clima",
+                "forecast_types": "daily",
+                "forecast": {"daily_slots": 5, "extra_attribute": "precipitation_probability"},
+                "grid_options": {"columns": "full", "rows": "auto"},
+            },
+            tile("sensor.clima_sensacion_termica", "Sensación térmica", 4, icon="mdi:thermometer-lines"),
+            tile("sensor.clima_viento", "Viento", 4, icon="mdi:weather-windy"),
+            tile("sensor.clima_indice_uv", "Índice UV", 4),
+            span=2,
+        ),
+        section(heading("Traffic"), *RUTA, {"type": "markdown", "content": RUTA_LINKS, "grid_options": {"columns": "full"}}, waze_map(5), *ROAD[:2], span=2),
     ],
 }]
 # Network is the view drawn by hand in the Network dashboard (AdGuard), shown here as a copy.
@@ -174,6 +321,7 @@ network = first_view("dashboard_network")
 if network:
     network.pop("icon", None)
     views.append({**network, "title": "Network", "path": "network"})
+views[1:1] = [weather, traffic]
 views += [
     # Filled by Home Assistant: every light, and every camera, lock and alarm, as they are added
     {"title": "Lights", "path": "lights", "strategy": {"type": "light"}},
@@ -189,6 +337,14 @@ for area, title, icon in [("bedroom", "Bedroom", "mdi:bed"), ("living_room", "Li
     dash_id = f"dashboard_{area.split('_')[0]}"
     generated.append(entry(dash_id, title, icon))
     write(dash_id, {"views": [{"title": title, "path": area.split("_")[0], "strategy": {"type": "area", "area": area}}]})
+
+resources_path = storage / "lovelace_resources"
+resources = json.loads(resources_path.read_text(encoding="utf-8"))
+for name in WEATHER_CARDS:
+    url = f"/local/weather-cards/{name}"
+    if not any(r["url"].split("?")[0] == url for r in resources["data"]["items"]):
+        resources["data"]["items"].append({"id": uuid.uuid4().hex, "url": url, "type": "module"})
+resources_path.write_text(json.dumps(resources, indent=2, ensure_ascii=False), encoding="utf-8", newline="\n")
 
 ids = {g["id"] for g in generated}
 registry["data"]["items"] = [i for i in registry["data"]["items"] if i["id"] not in ids] + generated

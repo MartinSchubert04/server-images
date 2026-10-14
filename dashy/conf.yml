@@ -31,6 +31,11 @@ sections:
         description: Cámaras y detección
         icon: hl-frigate
         url: http://192.168.1.100:5000
+      - title: RuView
+        description: Presencia por WiFi · Solo por Tailscale
+        icon: fas fa-wifi
+        url: http://mrtn-server.tailbce521.ts.net:3080/ui/index.html
+        statusCheck: false
 
   - name: Red y sistema
     icon: fas fa-network-wired

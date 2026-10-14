@@ -1,0 +1,273 @@
+# Clima en tiempo real desde Open-Meteo (sin API key), para el dashboard Weather.
+#
+# Un solo pedido cada 10 minutos trae el estado actual, 48 horas y 8 días. De ahí salen los sensores
+# sensor.clima_* y la entidad weather.clima, que es la que leen las tarjetas de pronóstico.
+# La ubicación sale de secrets.yaml (clima_latitud y clima_longitud) para que no quede en el repo.
+
+rest:
+  - resource: https://api.open-meteo.com/v1/forecast
+    scan_interval: 600
+    timeout: 20
+    params:
+      latitude: !secret clima_latitud
+      longitude: !secret clima_longitud
+      timezone: auto
+      forecast_days: 8
+      forecast_hours: 48
+      current: temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m,dew_point_2m,uv_index,visibility
+      hourly: temperature_2m,apparent_temperature,relative_humidity_2m,precipitation_probability,precipitation,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,wind_gusts_10m,uv_index,is_day
+      daily: weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant,uv_index_max
+    sensor:
+      - name: "Clima temperatura"
+        unique_id: clima_temperatura
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        value_template: "{{ value_json.current.temperature_2m }}"
+      - name: "Clima sensacion termica"
+        unique_id: clima_sensacion_termica
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        value_template: "{{ value_json.current.apparent_temperature }}"
+      - name: "Clima punto de rocio"
+        unique_id: clima_punto_de_rocio
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        value_template: "{{ value_json.current.dew_point_2m }}"
+      - name: "Clima humedad"
+        unique_id: clima_humedad
+        unit_of_measurement: "%"
+        device_class: humidity
+        state_class: measurement
+        value_template: "{{ value_json.current.relative_humidity_2m }}"
+      - name: "Clima presion"
+        unique_id: clima_presion
+        unit_of_measurement: "hPa"
+        device_class: atmospheric_pressure
+        state_class: measurement
+        value_template: "{{ value_json.current.pressure_msl }}"
+      - name: "Clima viento"
+        unique_id: clima_viento
+        unit_of_measurement: "km/h"
+        device_class: wind_speed
+        state_class: measurement
+        value_template: "{{ value_json.current.wind_speed_10m }}"
+      - name: "Clima rafagas"
+        unique_id: clima_rafagas
+        unit_of_measurement: "km/h"
+        device_class: wind_speed
+        state_class: measurement
+        value_template: "{{ value_json.current.wind_gusts_10m }}"
+      - name: "Clima direccion del viento"
+        unique_id: clima_direccion_del_viento
+        unit_of_measurement: "°"
+        state_class: measurement
+        icon: mdi:compass-outline
+        value_template: "{{ value_json.current.wind_direction_10m }}"
+      - name: "Clima nubosidad"
+        unique_id: clima_nubosidad
+        unit_of_measurement: "%"
+        state_class: measurement
+        icon: mdi:cloud-percent
+        value_template: "{{ value_json.current.cloud_cover }}"
+      - name: "Clima precipitacion"
+        unique_id: clima_precipitacion
+        unit_of_measurement: "mm"
+        device_class: precipitation
+        state_class: measurement
+        value_template: "{{ value_json.current.precipitation }}"
+      - name: "Clima indice UV"
+        unique_id: clima_indice_uv
+        state_class: measurement
+        icon: mdi:sun-wireless
+        value_template: "{{ value_json.current.uv_index }}"
+      - name: "Clima visibilidad"
+        unique_id: clima_visibilidad
+        unit_of_measurement: "km"
+        device_class: distance
+        state_class: measurement
+        value_template: "{{ (value_json.current.visibility / 1000) | round(1) }}"
+      # Código WMO del estado del cielo; weather.clima lo traduce a la condición de Home Assistant
+      - name: "Clima codigo"
+        unique_id: clima_codigo
+        icon: mdi:weather-partly-cloudy
+        value_template: "{{ value_json.current.weather_code }}"
+        json_attributes_path: "$.current"
+        json_attributes:
+          - is_day
+          - time
+      # Los pronósticos van como atributos (listas paralelas); el estado es la cantidad de pasos
+      - name: "Clima pronostico horario"
+        unique_id: clima_pronostico_horario
+        icon: mdi:clock-outline
+        value_template: "{{ value_json.hourly.time | count }}"
+        json_attributes_path: "$.hourly"
+        json_attributes:
+          - time
+          - temperature_2m
+          - apparent_temperature
+          - relative_humidity_2m
+          - precipitation_probability
+          - precipitation
+          - weather_code
+          - cloud_cover
+          - wind_speed_10m
+          - wind_direction_10m
+          - wind_gusts_10m
+          - uv_index
+          - is_day
+      - name: "Clima pronostico diario"
+        unique_id: clima_pronostico_diario
+        icon: mdi:calendar-week
+        value_template: "{{ value_json.daily.time | count }}"
+        json_attributes_path: "$.daily"
+        json_attributes:
+          - time
+          - weather_code
+          - temperature_2m_max
+          - temperature_2m_min
+          - precipitation_sum
+          - precipitation_probability_max
+          - wind_speed_10m_max
+          - wind_gusts_10m_max
+          - wind_direction_10m_dominant
+          - uv_index_max
+
+  - resource: https://air-quality-api.open-meteo.com/v1/air-quality
+    scan_interval: 1800
+    timeout: 20
+    params:
+      latitude: !secret clima_latitud
+      longitude: !secret clima_longitud
+      timezone: auto
+      current: us_aqi,pm2_5,pm10
+    sensor:
+      - name: "Clima calidad del aire"
+        unique_id: clima_calidad_del_aire
+        device_class: aqi
+        state_class: measurement
+        value_template: "{{ value_json.current.us_aqi }}"
+      - name: "Clima PM2.5"
+        unique_id: clima_pm25
+        unit_of_measurement: "µg/m³"
+        device_class: pm25
+        state_class: measurement
+        value_template: "{{ value_json.current.pm2_5 }}"
+      - name: "Clima PM10"
+        unique_id: clima_pm10
+        unit_of_measurement: "µg/m³"
+        device_class: pm10
+        state_class: measurement
+        value_template: "{{ value_json.current.pm10 }}"
+
+template:
+  - weather:
+      - name: "Clima"
+        unique_id: clima_open_meteo
+        attribution_template: "Open-Meteo"
+        temperature_unit: "°C"
+        pressure_unit: "hPa"
+        wind_speed_unit: "km/h"
+        visibility_unit: "km"
+        precipitation_unit: "mm"
+        # Códigos WMO -> condiciones de Home Assistant; de noche el cielo despejado es clear-night
+        condition_template: >-
+          {% set cond = {0: 'sunny', 1: 'sunny', 2: 'partlycloudy', 3: 'cloudy', 45: 'fog', 48: 'fog',
+            51: 'rainy', 53: 'rainy', 55: 'rainy', 56: 'snowy-rainy', 57: 'snowy-rainy',
+            61: 'rainy', 63: 'rainy', 65: 'pouring', 66: 'snowy-rainy', 67: 'snowy-rainy',
+            71: 'snowy', 73: 'snowy', 75: 'snowy', 77: 'snowy', 80: 'rainy', 81: 'rainy', 82: 'pouring',
+            85: 'snowy', 86: 'snowy', 95: 'lightning-rainy', 96: 'lightning-rainy', 99: 'lightning-rainy'} %}
+          {% set c = cond.get(states('sensor.clima_codigo') | int(-1), 'cloudy') %}
+          {{ 'clear-night' if c == 'sunny' and state_attr('sensor.clima_codigo', 'is_day') == 0 else c }}
+        temperature_template: "{{ states('sensor.clima_temperatura') | float(0) }}"
+        apparent_temperature_template: "{{ states('sensor.clima_sensacion_termica') | float(0) }}"
+        dew_point_template: "{{ states('sensor.clima_punto_de_rocio') | float(0) }}"
+        humidity_template: "{{ states('sensor.clima_humedad') | float(0) }}"
+        pressure_template: "{{ states('sensor.clima_presion') | float(0) }}"
+        wind_speed_template: "{{ states('sensor.clima_viento') | float(0) }}"
+        wind_gust_speed_template: "{{ states('sensor.clima_rafagas') | float(0) }}"
+        wind_bearing_template: "{{ states('sensor.clima_direccion_del_viento') | float(0) }}"
+        cloud_coverage_template: "{{ states('sensor.clima_nubosidad') | float(0) }}"
+        uv_index_template: "{{ states('sensor.clima_indice_uv') | float(0) }}"
+        visibility_template: "{{ states('sensor.clima_visibilidad') | float(0) }}"
+        forecast_hourly_template: >-
+          {% set cond = {0: 'sunny', 1: 'sunny', 2: 'partlycloudy', 3: 'cloudy', 45: 'fog', 48: 'fog',
+            51: 'rainy', 53: 'rainy', 55: 'rainy', 56: 'snowy-rainy', 57: 'snowy-rainy',
+            61: 'rainy', 63: 'rainy', 65: 'pouring', 66: 'snowy-rainy', 67: 'snowy-rainy',
+            71: 'snowy', 73: 'snowy', 75: 'snowy', 77: 'snowy', 80: 'rainy', 81: 'rainy', 82: 'pouring',
+            85: 'snowy', 86: 'snowy', 95: 'lightning-rainy', 96: 'lightning-rainy', 99: 'lightning-rainy'} %}
+          {% set h = 'sensor.clima_pronostico_horario' %}
+          {% set t = state_attr(h, 'time') or [] %}
+          {% set offset = now().isoformat()[-6:] %}
+          {% set ns = namespace(out=[]) %}
+          {% for i in range(t | count) %}
+            {% set c = cond.get(state_attr(h, 'weather_code')[i] | int(-1), 'cloudy') %}
+            {% set ns.out = ns.out + [{
+              'datetime': t[i] ~ ':00' ~ offset,
+              'condition': 'clear-night' if c == 'sunny' and state_attr(h, 'is_day')[i] == 0 else c,
+              'is_daytime': state_attr(h, 'is_day')[i] == 1,
+              'temperature': state_attr(h, 'temperature_2m')[i],
+              'apparent_temperature': state_attr(h, 'apparent_temperature')[i],
+              'humidity': state_attr(h, 'relative_humidity_2m')[i],
+              'precipitation': state_attr(h, 'precipitation')[i],
+              'precipitation_probability': state_attr(h, 'precipitation_probability')[i],
+              'cloud_coverage': state_attr(h, 'cloud_cover')[i],
+              'wind_speed': state_attr(h, 'wind_speed_10m')[i],
+              'wind_gust_speed': state_attr(h, 'wind_gusts_10m')[i],
+              'wind_bearing': state_attr(h, 'wind_direction_10m')[i],
+              'uv_index': state_attr(h, 'uv_index')[i]
+            }] %}
+          {% endfor %}
+          {{ ns.out }}
+        forecast_daily_template: >-
+          {% set cond = {0: 'sunny', 1: 'sunny', 2: 'partlycloudy', 3: 'cloudy', 45: 'fog', 48: 'fog',
+            51: 'rainy', 53: 'rainy', 55: 'rainy', 56: 'snowy-rainy', 57: 'snowy-rainy',
+            61: 'rainy', 63: 'rainy', 65: 'pouring', 66: 'snowy-rainy', 67: 'snowy-rainy',
+            71: 'snowy', 73: 'snowy', 75: 'snowy', 77: 'snowy', 80: 'rainy', 81: 'rainy', 82: 'pouring',
+            85: 'snowy', 86: 'snowy', 95: 'lightning-rainy', 96: 'lightning-rainy', 99: 'lightning-rainy'} %}
+          {% set d = 'sensor.clima_pronostico_diario' %}
+          {% set t = state_attr(d, 'time') or [] %}
+          {% set offset = now().isoformat()[-6:] %}
+          {% set ns = namespace(out=[]) %}
+          {% for i in range(t | count) %}
+            {% set ns.out = ns.out + [{
+              'datetime': t[i] ~ 'T00:00:00' ~ offset,
+              'condition': cond.get(state_attr(d, 'weather_code')[i] | int(-1), 'cloudy'),
+              'temperature': state_attr(d, 'temperature_2m_max')[i],
+              'templow': state_attr(d, 'temperature_2m_min')[i],
+              'precipitation': state_attr(d, 'precipitation_sum')[i],
+              'precipitation_probability': state_attr(d, 'precipitation_probability_max')[i],
+              'wind_speed': state_attr(d, 'wind_speed_10m_max')[i],
+              'wind_gust_speed': state_attr(d, 'wind_gusts_10m_max')[i],
+              'wind_bearing': state_attr(d, 'wind_direction_10m_dominant')[i],
+              'uv_index': state_attr(d, 'uv_index_max')[i]
+            }] %}
+          {% endfor %}
+          {{ ns.out }}
+
+# Listas de pronóstico que cambian en cada lectura: guardarlas solo engordaría la base
+recorder:
+  exclude:
+    entities:
+      - sensor.clima_pronostico_horario
+      - sensor.clima_pronostico_diario
+
+automation:
+  # Si Open-Meteo falla (pasa a veces en el arranque), el próximo pedido sería recién a los 10 minutos
+  - id: clima_reintentar
+    alias: "Clima: reintentar si Open-Meteo no respondió"
+    mode: single
+    trigger:
+      - platform: time_pattern
+        minutes: "/2"
+    condition:
+      - condition: template
+        value_template: "{{ not has_value('sensor.clima_temperatura') or not has_value('sensor.clima_calidad_del_aire') }}"
+    action:
+      - service: homeassistant.update_entity
+        target:
+          entity_id:
+            - sensor.clima_temperatura
+            - sensor.clima_calidad_del_aire

@@ -24,6 +24,23 @@ levanta con `docker compose up -d` desde adentro.
 3. Levantar `home-assistant` primero: crea la red `home`, que `adguard` usa como externa.
 4. Levantar el resto en cualquier orden.
 
+## Home Assistant: clima y tráfico
+
+El dashboard Home tiene las pestañas Weather y Traffic, y un resumen de ambas en Overview.
+
+- **Clima:** `home-assistant-init/packages/clima.yaml` consulta Open-Meteo cada 10 minutos y crea
+  `weather.clima` y los `sensor.clima_*`. Necesita `clima_latitud` y `clima_longitud` en el
+  `secrets.yaml` de Home Assistant.
+- **Tráfico:** mapas en vivo de Waze incrustados. Waze bloquea la integración Waze Travel Time
+  y las alternativas con tráfico (HERE, TomTom, Google) piden API key.
+- **Ruta por defecto:** `home-assistant-init/packages/ruta.yaml` calcula el tiempo en moto con
+  tráfico en vivo entre dos direcciones (Nominatim para ubicarlas, TomTom para la ruta). Necesita
+  `tomtom_api_key` en el `secrets.yaml` de Home Assistant. Origen y destino se editan en la
+  pestaña Traffic (`input_text.ruta_origen` y `input_text.ruta_destino`); no están en el repo.
+- **Tarjetas:** `weather-forecast-card.js` y `windy-card.js` van en `/config/www/weather-cards`;
+  los links de descarga están en `athanor/build_home_dashboard.py`.
+- `athanor/build_home_dashboard.py` se corre con el contenedor de Home Assistant detenido.
+
 ## Backups
 
 Kopia respalda todos los días a las 04:00 los volúmenes de Home Assistant, ESPHome, n8n, WAHA y

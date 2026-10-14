@@ -1,0 +1,153 @@
+# Ruta por defecto: tiempo y distancia entre dos direcciones, para el dashboard (Overview y Traffic).
+#
+# El origen y el destino son los dos input_text, que se editan desde la pestaña Traffic; las
+# direcciones viven en Home Assistant y no en este archivo. Nominatim (OpenStreetMap) las convierte en
+# coordenadas y TomTom calcula la ruta en moto con el tráfico en vivo. TomTom pide una API key
+# gratuita, que va en secrets.yaml como tomtom_api_key.
+
+input_text:
+  ruta_origen:
+    name: "Ruta: origen"
+    icon: mdi:home-map-marker
+    max: 150
+  ruta_destino:
+    name: "Ruta: destino"
+    icon: mdi:map-marker
+    max: 150
+
+rest:
+  # El estado es "lat,lon", el orden que espera TomTom. Al arrancar el campo todavía no tiene valor: la
+  # consulta va vacía a propósito, porque con "unknown" Nominatim encuentra un lugar con ese nombre
+  - resource: https://nominatim.openstreetmap.org/search
+    scan_interval: 86400
+    timeout: 20
+    headers:
+      User-Agent: "HomeAssistant packages/ruta.yaml (uso personal)"
+    params:
+      q: "{{ states('input_text.ruta_origen') if has_value('input_text.ruta_origen') else '' }}"
+      format: jsonv2
+      limit: 1
+      countrycodes: ar
+    sensor:
+      - name: "Ruta origen"
+        unique_id: ruta_origen_coordenadas
+        availability: "{{ states('input_text.ruta_origen') not in ['unknown', 'unavailable', ''] }}"
+        icon: mdi:home-map-marker
+        value_template: "{{ value_json[0].lat }},{{ value_json[0].lon }}"
+        json_attributes_path: "$[0]"
+        json_attributes:
+          - display_name
+  - resource: https://nominatim.openstreetmap.org/search
+    scan_interval: 86400
+    timeout: 20
+    headers:
+      User-Agent: "HomeAssistant packages/ruta.yaml (uso personal)"
+    params:
+      q: "{{ states('input_text.ruta_destino') if has_value('input_text.ruta_destino') else '' }}"
+      format: jsonv2
+      limit: 1
+      countrycodes: ar
+    sensor:
+      - name: "Ruta destino"
+        unique_id: ruta_destino_coordenadas
+        availability: "{{ states('input_text.ruta_destino') not in ['unknown', 'unavailable', ''] }}"
+        icon: mdi:map-marker
+        value_template: "{{ value_json[0].lat }},{{ value_json[0].lon }}"
+        json_attributes_path: "$[0]"
+        json_attributes:
+          - display_name
+
+  # travelMode motorcycle y traffic true: el tiempo es el de ahora, con el tráfico en vivo. Cada 5 minutos
+  # son unas 290 consultas por día, lejos del límite del plan gratuito
+  - resource_template: "https://api.tomtom.com/routing/1/calculateRoute/{{ states('sensor.ruta_origen') }}:{{ states('sensor.ruta_destino') }}/json"
+    scan_interval: 300
+    timeout: 20
+    params:
+      key: !secret tomtom_api_key
+      traffic: "true"
+      travelMode: motorcycle
+      routeType: fastest
+      computeTravelTimeFor: all
+    sensor:
+      - name: "Ruta tiempo"
+        unique_id: ruta_tiempo
+        availability: "{{ value_json.routes is defined }}"
+        unit_of_measurement: "min"
+        device_class: duration
+        state_class: measurement
+        icon: mdi:motorbike
+        value_template: "{{ (value_json.routes[0].summary.travelTimeInSeconds / 60) | round }}"
+      # Lo que agrega el tráfico de ahora sobre el mismo viaje con la calle libre
+      - name: "Ruta demora"
+        unique_id: ruta_demora
+        availability: "{{ value_json.routes is defined }}"
+        unit_of_measurement: "min"
+        device_class: duration
+        state_class: measurement
+        icon: mdi:car-brake-alert
+        value_template: >-
+          {% set s = value_json.routes[0].summary %}
+          {{ [((s.travelTimeInSeconds - s.noTrafficTravelTimeInSeconds) / 60) | round, 0] | max }}
+      - name: "Ruta distancia"
+        unique_id: ruta_distancia
+        availability: "{{ value_json.routes is defined }}"
+        unit_of_measurement: "km"
+        device_class: distance
+        state_class: measurement
+        value_template: "{{ (value_json.routes[0].summary.lengthInMeters / 1000) | round(1) }}"
+template:
+  - sensor:
+      # Qué tan bueno está para salir en moto, según el clima de ahora y de las próximas 3 horas
+      - name: "Ruta en moto"
+        unique_id: ruta_en_moto
+        icon: mdi:motorbike
+        state: >-
+          {% set lluvia = states('sensor.clima_precipitacion') | float(0) %}
+          {% set prob = (state_attr('sensor.clima_pronostico_horario', 'precipitation_probability') or [0])[:3] | max %}
+          {% set rafagas = states('sensor.clima_rafagas') | float(0) %}
+          {% set visibilidad = states('sensor.clima_visibilidad') | float(99) %}
+          {% if lluvia > 0.2 or rafagas >= 60 or visibilidad < 1 %}Mala
+          {% elif prob >= 50 or rafagas >= 40 or visibilidad < 4 %}Precaución
+          {% else %}Buena{% endif %}
+        attributes:
+          motivo: >-
+            {% set lluvia = states('sensor.clima_precipitacion') | float(0) %}
+            {% set prob = (state_attr('sensor.clima_pronostico_horario', 'precipitation_probability') or [0])[:3] | max %}
+            {% set rafagas = states('sensor.clima_rafagas') | float(0) %}
+            {% set visibilidad = states('sensor.clima_visibilidad') | float(99) %}
+            {% set m = [] %}
+            {% if lluvia > 0.2 %}{% set m = m + ['llueve'] %}{% endif %}
+            {% if prob >= 50 %}{% set m = m + ['%d %% de lluvia en 3 h' % prob] %}{% endif %}
+            {% if rafagas >= 40 %}{% set m = m + ['ráfagas de %d km/h' % rafagas] %}{% endif %}
+            {% if visibilidad < 4 %}{% set m = m + ['visibilidad de %s km' % visibilidad] %}{% endif %}
+            {{ m | join(', ') if m else 'sin lluvia ni viento fuerte' }}
+
+automation:
+  # Los sensores REST se leen una vez al día: al cambiar una dirección (o al arrancar) se piden de nuevo,
+  # con pausas porque Nominatim acepta un pedido por segundo
+  - id: ruta_recalcular
+    alias: "Ruta: recalcular al cambiar origen o destino"
+    mode: restart
+    trigger:
+      - platform: state
+        entity_id:
+          - input_text.ruta_origen
+          - input_text.ruta_destino
+      - platform: homeassistant
+        event: start
+    action:
+      - delay:
+          seconds: "{{ 45 if trigger.platform == 'homeassistant' else 2 }}"
+      - service: homeassistant.update_entity
+        target:
+          entity_id: sensor.ruta_origen
+      - delay:
+          seconds: 3
+      - service: homeassistant.update_entity
+        target:
+          entity_id: sensor.ruta_destino
+      - delay:
+          seconds: 3
+      - service: homeassistant.update_entity
+        target:
+          entity_id: sensor.ruta_tiempo
