@@ -63,7 +63,43 @@ input_number:
     unit_of_measurement: "%"
     mode: slider
 
+# Qué Haze muestra la tarjeta Media del kiosco (el chip de arriba a la derecha pasa al siguiente).
+# Cada opción es el prefijo de las entidades de un Haze ("haze_pc" → sensor.haze_pc_estado, ...).
+# La automatización kiosk_haze_opciones rearma la lista con los Haze que existan.
+input_select:
+  kiosk_haze:
+    name: "Kiosco: Haze a mostrar"
+    icon: mdi:music-box-multiple
+    options:
+      - haze_mrtn_main
+      - haze_pc
+
 automation:
+  # Lista de Haze para input_select.kiosk_haze: un Haze nuevo aparece solo al crearse sus entidades
+  # por MQTT discovery. Sale del registro (integration_entities), no de los estados, porque al
+  # crearse la entidad puede no tener estado todavía.
+  - id: kiosk_haze_opciones
+    alias: "Kiosco: lista de Haze"
+    mode: queued
+    trigger:
+      - platform: homeassistant
+        event: start
+      - platform: event
+        event_type: entity_registry_updated
+    variables:
+      haze: >-
+        {{ integration_entities('mqtt') | select('match', 'sensor\.haze_.*_estado$')
+           | map('regex_replace', '^sensor\.(.*)_estado$', '\\1') | sort | list }}
+    condition:
+      - condition: template
+        value_template: "{{ haze | count > 0 and haze != state_attr('input_select.kiosk_haze', 'options') }}"
+    action:
+      - service: input_select.set_options
+        target:
+          entity_id: input_select.kiosk_haze
+        data:
+          options: "{{ haze }}"
+
   # Brillo de la pantalla del kiosco según la hora
   - id: kiosk_brillo_nocturno
     alias: "Kiosco: brillo de noche y de día"

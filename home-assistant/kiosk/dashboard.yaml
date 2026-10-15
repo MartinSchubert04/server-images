@@ -482,25 +482,27 @@ button_card_templates:
       }
 
   # Section title for every section after the first one in a column.
-  # Haze, the desktop music player (MQTT entities of "Haze PC"): the cover fills the
+  # Haze, the desktop music player (MQTT entities, one device per PC): the cover fills the
   # card and fades to dark at the bottom, where title, artist and the controls sit.
+  # Which Haze it shows comes from input_select.kiosk_haze (entity prefix, e.g. haze_pc);
+  # the chip at the top right switches to the next one. Entity ids are built from it, so
+  # triggers_update can't list them: "all" re-renders on any change (cheap, 3 templates).
   # Folder opens HA's own dialog for the select entity. Double width, triple height.
   fusion_media:
-    entity: sensor.haze_mrtn_main_estado
+    entity: input_select.kiosk_haze
     show_name: false
     show_state: false
     show_icon: false
     tap_action: { action: none }
     hold_action: { action: none }
-    triggers_update:
-      - sensor.haze_mrtn_main_cancion
-      - image.haze_mrtn_main_caratula
-      - switch.haze_mrtn_main_aleatorio
+    triggers_update: all
     custom_fields:
       bg: |
         [[[
-          const img = states['image.haze_mrtn_main_caratula'];
-          const on = entity && ['playing', 'paused'].includes(entity.state);
+          const p = entity && entity.state;
+          const st = states[`sensor.${p}_estado`];
+          const img = states[`image.${p}_caratula`];
+          const on = st && ['playing', 'paused'].includes(st.state);
           const pic = on && img && img.state !== 'unavailable' && img.attributes.entity_picture;
           // La URL del proxy no cambia con la tapa: el estado (fecha de la ultima tapa) evita que quede la vieja en cache.
           const src = pic && `${pic}&v=${encodeURIComponent(img.state)}`;
@@ -509,10 +511,21 @@ button_card_templates:
       info: |
         [[[
           const esc = (s) => String(s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-          if (!entity || entity.state === 'unavailable') return `<div class="t">PC off</div><div class="s">Haze is offline</div>`;
-          const a = entity.attributes;
+          const st = entity && states[`sensor.${entity.state}_estado`];
+          if (!st || st.state === 'unavailable') return `<div class="t">PC off</div><div class="s">Haze is offline</div>`;
+          const a = st.attributes;
           if (!a.title) return `<div class="t">Nothing playing</div><div class="s">Haze</div>`;
           return `<div class="t">${esc(a.title)}</div><div class="s">${esc(a.artist || a.context)}</div>`;
+        ]]]
+      dev: |
+        [[[
+          if (!entity) return '';
+          const callHass = `(this.getRootNode().host.hass||document.querySelector('home-assistant').hass)`;
+          const stop = 'event.stopPropagation()';
+          const next = `${callHass}.callService('input_select','select_next',{entity_id:'input_select.kiosk_haze'})`;
+          const name = entity.state.replace(/^haze_/, '').replace(/_/g, '-');
+          return `<div class="d" onpointerup="${stop};${next}" onpointerdown="${stop}" onclick="${stop}" ` +
+            `onmousedown="${stop}" ontouchstart="${stop}"><ha-icon icon="mdi:monitor-speaker"></ha-icon>${name}</div>`;
         ]]]
       ctl: |
         [[[
@@ -523,14 +536,16 @@ button_card_templates:
             `<div class="b ${cls}" onpointerup="${stop};${action}" onpointerdown="${stop}" onclick="${stop}" ` +
             `onmousedown="${stop}" ontouchstart="${stop}"><ha-icon icon="${icon}"></ha-icon></div>`;
           const press = (id) => `${callHass}.callService('button','press',{entity_id:'${id}'})`;
-          const shuffle = states['switch.haze_mrtn_main_aleatorio'];
+          const p = entity && entity.state;
+          const st = states[`sensor.${p}_estado`];
+          const shuffle = states[`switch.${p}_aleatorio`];
           const shuffleOn = shuffle && shuffle.state === 'on';
-          const folder = `this.dispatchEvent(new CustomEvent('hass-more-info',{bubbles:true,composed:true,detail:{entityId:'select.haze_mrtn_main_reproducir_carpeta'}}))`;
-          const playing = entity && entity.state === 'playing';
-          return btn(`${callHass}.callService('switch','toggle',{entity_id:'switch.haze_mrtn_main_aleatorio'})`, 'mdi:shuffle-variant', shuffleOn ? 'on' : '') +
-            btn(press('button.haze_mrtn_main_anterior'), 'mdi:skip-previous', '') +
-            btn(press('button.haze_mrtn_main_play_pausa'), playing ? 'mdi:pause' : 'mdi:play', 'main') +
-            btn(press('button.haze_mrtn_main_siguiente'), 'mdi:skip-next', '') +
+          const folder = `this.dispatchEvent(new CustomEvent('hass-more-info',{bubbles:true,composed:true,detail:{entityId:'select.${p}_reproducir_carpeta'}}))`;
+          const playing = st && st.state === 'playing';
+          return btn(`${callHass}.callService('switch','toggle',{entity_id:'switch.${p}_aleatorio'})`, 'mdi:shuffle-variant', shuffleOn ? 'on' : '') +
+            btn(press(`button.${p}_anterior`), 'mdi:skip-previous', '') +
+            btn(press(`button.${p}_play_pausa`), playing ? 'mdi:pause' : 'mdi:play', 'main') +
+            btn(press(`button.${p}_siguiente`), 'mdi:skip-next', '') +
             btn(folder, 'mdi:folder-music-outline', '');
         ]]]
     styles:
@@ -572,7 +587,18 @@ button_card_templates:
           - align-items: center
           - gap: 18px
           - pointer-events: auto
+        dev:
+          - position: absolute
+          - top: 10px
+          - right: 10px
     extra_styles: |
+      .d {
+        display: flex; align-items: center; gap: 4px; padding: 4px 10px 4px 8px;
+        border-radius: 999px; background: rgba(10, 13, 16, 0.55); cursor: pointer;
+        font-size: 12px; line-height: 16px; color: rgba(255, 255, 255, 0.85);
+      }
+      .d ha-icon { --mdc-icon-size: 16px; }
+      .d:active { transform: scale(0.95); }
       #bg .pic { position: absolute; inset: 0; background-size: cover; background-position: center; }
       #bg::after {
         content: ''; position: absolute; inset: 0;
