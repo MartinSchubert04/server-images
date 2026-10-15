@@ -482,6 +482,98 @@ button_card_templates:
       }
 
   # Section title for every section after the first one in a column.
+  # Desktop music player (MQTT entities of "Reproductor PC"): cover, title,
+  # artist and prev / play-pause / next. Double width, double height.
+  fusion_media:
+    entity: sensor.reproductor_pc_estado
+    show_name: false
+    show_state: false
+    show_icon: false
+    tap_action: { action: none }
+    hold_action: { action: none }
+    triggers_update:
+      - sensor.reproductor_pc_cancion
+      - image.reproductor_pc_caratula
+    custom_fields:
+      art: |
+        [[[
+          const img = states['image.reproductor_pc_caratula'];
+          const on = entity && ['playing', 'paused'].includes(entity.state);
+          const pic = on && img && img.state !== 'unavailable' && img.attributes.entity_picture;
+          return pic ? `<img src="${pic}">` : `<ha-icon icon="mdi:music"></ha-icon>`;
+        ]]]
+      info: |
+        [[[
+          const esc = (s) => String(s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+          if (!entity || entity.state === 'unavailable') return `<div class="t">PC off</div><div class="s">Player offline</div>`;
+          const a = entity.attributes;
+          if (!a.title) return `<div class="t">Nothing playing</div><div class="s">Reproductor PC</div>`;
+          return `<div class="t">${esc(a.title)}</div><div class="s">${esc(a.artist || a.context)}</div>`;
+        ]]]
+      ctl: |
+        [[[
+          const hass = `(this.getRootNode().host.hass||document.querySelector('home-assistant').hass)`;
+          const stop = 'event.stopPropagation()';
+          const btn = (id, icon, cls) =>
+            `<div class="b ${cls}" onpointerup="${stop};${hass}.callService('button','press',{entity_id:'${id}'})" ` +
+            `onpointerdown="${stop}" onclick="${stop}" onmousedown="${stop}" ontouchstart="${stop}"><ha-icon icon="${icon}"></ha-icon></div>`;
+          const playing = entity && entity.state === 'playing';
+          return btn('button.reproductor_pc_anterior', 'mdi:skip-previous', '') +
+            btn('button.reproductor_pc_play_pausa', playing ? 'mdi:pause' : 'mdi:play', 'main') +
+            btn('button.reproductor_pc_siguiente', 'mdi:skip-next', '');
+        ]]]
+    styles:
+      card:
+        - width: 393.6px
+        - height: 131.6px
+        - padding: 0
+        - border: none
+        - border-radius: 10.4px
+        - box-shadow: none
+        - background: rgba(0, 0, 0, 0.15)
+        - font-family: '"Inter Variable", system-ui'
+        - color: rgb(255, 255, 255)
+      grid:
+        - grid-template-areas: '"art info" "art ctl"'
+        - grid-template-columns: 131.6px minmax(0, 1fr)
+        - grid-template-rows: 1fr 1fr
+      custom_fields:
+        art:
+          - width: 107px
+          - height: 107px
+          - border-radius: 8px
+          - overflow: hidden
+          - justify-self: center
+          - align-self: center
+          - display: grid
+          - place-items: center
+          - background: rgba(255, 255, 255, 0.06)
+          - color: rgba(255, 255, 255, 0.4)
+        info:
+          - justify-self: stretch
+          - align-self: end
+          - min-width: 0
+          - padding-right: 11.52px
+          - text-align: left
+        ctl:
+          - justify-self: start
+          - align-self: center
+          - display: flex
+          - gap: 9.6px
+          - pointer-events: auto
+    extra_styles: |
+      .t, .s { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .t { font-size: 15.2px; font-weight: 500; line-height: 19px; }
+      .s { font-size: 14.8px; line-height: 18px; color: rgba(255, 255, 255, 0.7); }
+      #art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+      .b {
+        width: 44px; height: 44px; border-radius: 50%;
+        display: grid; place-items: center; cursor: pointer;
+        pointer-events: auto; background: rgba(255, 255, 255, 0.08);
+      }
+      .b.main { background: rgba(255, 255, 255, 0.85); color: rgb(48, 51, 52); }
+      .b:active { transform: scale(0.94); }
+
   fusion_title_next:
     template: fusion_title
     styles:
@@ -836,7 +928,7 @@ views:
                               - line-height: 18px
                               - font-variant-numeric: tabular-nums
                               - color: rgba(255, 255, 255, 0.7)
-                  # Media: placeholder until the Spotify integration is added.
+                  # Media: the desktop player on the PC (music-player/desktop), over MQTT.
                   - type: custom:button-card
                     template: fusion_title_next
                     name: Media
@@ -845,33 +937,35 @@ views:
                     layout: *tiles_layout
                     cards:
                       - type: custom:button-card
-                        template: fusion_tile
-                        name: Spotify
-                        icon: mdi:spotify
-                        show_state: false
-                        tap_action: { action: none }
+                        template: fusion_media
                         view_layout:
                           grid-column: span 2
-                        custom_fields:
-                          s: Not connected yet
-                        styles:
-                          card:
-                            - width: 393.6px
-                          img_cell:
-                            - background: rgb(30, 215, 96)
-                          custom_fields:
-                            s:
-                              - justify-self: start
-                              - align-self: start
-                              - padding-right: 11.52px
-                              - font-size: 14.8px
-                              - line-height: 18px
-                              - color: rgba(255, 255, 255, 0.7)
+                      # Tap to pick a folder to play (select entity, more-info dropdown).
+                      - type: custom:button-card
+                        template: fusion_tile
+                        entity: select.reproductor_pc_reproducir_carpeta
+                        name: Folder
+                        icon: mdi:folder-music
+                        state_display: |
+                          [[[
+                            const s = states['sensor.reproductor_pc_estado'];
+                            return (s && s.attributes.context) || 'Pick one';
+                          ]]]
+                      - type: custom:button-card
+                        template: fusion_tile
+                        entity: switch.reproductor_pc_aleatorio
+                        name: Shuffle
+                        icon: mdi:shuffle-variant
+                        tap_action: { action: toggle }
+                        state_display: |
+                          [[[ return entity.state === 'on' ? 'On' : 'Off'; ]]]
               - type: vertical-stack
                 cards:
+                  # Untitled: an invisible title (zero-width space) keeps these
+                  # tiles level with the ones under "Room".
                   - type: custom:button-card
                     template: fusion_title
-                    name: Me
+                    name: "​"
                   - type: custom:layout-card
                     layout_type: custom:grid-layout
                     layout: *tiles_layout
