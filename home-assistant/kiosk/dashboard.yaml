@@ -482,22 +482,22 @@ button_card_templates:
       }
 
   # Section title for every section after the first one in a column.
-  # Desktop music player (MQTT entities of "Reproductor PC"): cover, title,
+  # Haze, the desktop music player (MQTT entities of "Haze PC"): cover, title,
   # artist and prev / play-pause / next. Double width, double height.
   fusion_media:
-    entity: sensor.reproductor_pc_estado
+    entity: sensor.haze_pc_estado
     show_name: false
     show_state: false
     show_icon: false
     tap_action: { action: none }
     hold_action: { action: none }
     triggers_update:
-      - sensor.reproductor_pc_cancion
-      - image.reproductor_pc_caratula
+      - sensor.haze_pc_cancion
+      - image.haze_pc_caratula
     custom_fields:
       art: |
         [[[
-          const img = states['image.reproductor_pc_caratula'];
+          const img = states['image.haze_pc_caratula'];
           const on = entity && ['playing', 'paused'].includes(entity.state);
           const pic = on && img && img.state !== 'unavailable' && img.attributes.entity_picture;
           return pic ? `<img src="${pic}">` : `<ha-icon icon="mdi:music"></ha-icon>`;
@@ -507,7 +507,7 @@ button_card_templates:
           const esc = (s) => String(s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
           if (!entity || entity.state === 'unavailable') return `<div class="t">PC off</div><div class="s">Player offline</div>`;
           const a = entity.attributes;
-          if (!a.title) return `<div class="t">Nothing playing</div><div class="s">Reproductor PC</div>`;
+          if (!a.title) return `<div class="t">Nothing playing</div><div class="s">Haze PC</div>`;
           return `<div class="t">${esc(a.title)}</div><div class="s">${esc(a.artist || a.context)}</div>`;
         ]]]
       ctl: |
@@ -518,9 +518,9 @@ button_card_templates:
             `<div class="b ${cls}" onpointerup="${stop};${hass}.callService('button','press',{entity_id:'${id}'})" ` +
             `onpointerdown="${stop}" onclick="${stop}" onmousedown="${stop}" ontouchstart="${stop}"><ha-icon icon="${icon}"></ha-icon></div>`;
           const playing = entity && entity.state === 'playing';
-          return btn('button.reproductor_pc_anterior', 'mdi:skip-previous', '') +
-            btn('button.reproductor_pc_play_pausa', playing ? 'mdi:pause' : 'mdi:play', 'main') +
-            btn('button.reproductor_pc_siguiente', 'mdi:skip-next', '');
+          return btn('button.haze_pc_anterior', 'mdi:skip-previous', '') +
+            btn('button.haze_pc_play_pausa', playing ? 'mdi:pause' : 'mdi:play', 'main') +
+            btn('button.haze_pc_siguiente', 'mdi:skip-next', '');
         ]]]
     styles:
       card:
@@ -928,7 +928,7 @@ views:
                               - line-height: 18px
                               - font-variant-numeric: tabular-nums
                               - color: rgba(255, 255, 255, 0.7)
-                  # Media: the desktop player on the PC (music-player/desktop), over MQTT.
+                  # Media: Haze, the desktop player on the PC (github.com/MartinSchubert04/Haze), over MQTT.
                   - type: custom:button-card
                     template: fusion_title_next
                     name: Media
@@ -943,17 +943,17 @@ views:
                       # Tap to pick a folder to play (select entity, more-info dropdown).
                       - type: custom:button-card
                         template: fusion_tile
-                        entity: select.reproductor_pc_reproducir_carpeta
+                        entity: select.haze_pc_reproducir_carpeta
                         name: Folder
                         icon: mdi:folder-music
                         state_display: |
                           [[[
-                            const s = states['sensor.reproductor_pc_estado'];
+                            const s = states['sensor.haze_pc_estado'];
                             return (s && s.attributes.context) || 'Pick one';
                           ]]]
                       - type: custom:button-card
                         template: fusion_tile
-                        entity: switch.reproductor_pc_aleatorio
+                        entity: switch.haze_pc_aleatorio
                         name: Shuffle
                         icon: mdi:shuffle-variant
                         tap_action: { action: toggle }
