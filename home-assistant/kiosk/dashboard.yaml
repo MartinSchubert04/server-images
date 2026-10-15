@@ -482,8 +482,9 @@ button_card_templates:
       }
 
   # Section title for every section after the first one in a column.
-  # Haze, the desktop music player (MQTT entities of "Haze PC"): cover, title,
-  # artist and prev / play-pause / next. Double width, double height.
+  # Haze, the desktop music player (MQTT entities of "Haze PC"): the cover fills the
+  # card and fades to dark at the bottom, where title, artist and the controls sit.
+  # Folder opens HA's own dialog for the select entity. Double width, triple height.
   fusion_media:
     entity: sensor.haze_pc_estado
     show_name: false
@@ -494,20 +495,21 @@ button_card_templates:
     triggers_update:
       - sensor.haze_pc_cancion
       - image.haze_pc_caratula
+      - switch.haze_pc_aleatorio
     custom_fields:
-      art: |
+      bg: |
         [[[
           const img = states['image.haze_pc_caratula'];
           const on = entity && ['playing', 'paused'].includes(entity.state);
           const pic = on && img && img.state !== 'unavailable' && img.attributes.entity_picture;
-          return pic ? `<img src="${pic}">` : `<ha-icon icon="mdi:music"></ha-icon>`;
+          return pic ? `<div class="pic" style="background-image:url('${pic}')"></div>` : `<ha-icon icon="mdi:music"></ha-icon>`;
         ]]]
       info: |
         [[[
           const esc = (s) => String(s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-          if (!entity || entity.state === 'unavailable') return `<div class="t">PC off</div><div class="s">Player offline</div>`;
+          if (!entity || entity.state === 'unavailable') return `<div class="t">PC off</div><div class="s">Haze is offline</div>`;
           const a = entity.attributes;
-          if (!a.title) return `<div class="t">Nothing playing</div><div class="s">Haze PC</div>`;
+          if (!a.title) return `<div class="t">Nothing playing</div><div class="s">Haze</div>`;
           return `<div class="t">${esc(a.title)}</div><div class="s">${esc(a.artist || a.context)}</div>`;
         ]]]
       ctl: |
@@ -515,65 +517,79 @@ button_card_templates:
           // No llamarla `hass`: button-card ya define esa variable y redeclararla rompe la plantilla.
           const callHass = `(this.getRootNode().host.hass||document.querySelector('home-assistant').hass)`;
           const stop = 'event.stopPropagation()';
-          const btn = (id, icon, cls) =>
-            `<div class="b ${cls}" onpointerup="${stop};${callHass}.callService('button','press',{entity_id:'${id}'})" ` +
-            `onpointerdown="${stop}" onclick="${stop}" onmousedown="${stop}" ontouchstart="${stop}"><ha-icon icon="${icon}"></ha-icon></div>`;
+          const btn = (action, icon, cls) =>
+            `<div class="b ${cls}" onpointerup="${stop};${action}" onpointerdown="${stop}" onclick="${stop}" ` +
+            `onmousedown="${stop}" ontouchstart="${stop}"><ha-icon icon="${icon}"></ha-icon></div>`;
+          const press = (id) => `${callHass}.callService('button','press',{entity_id:'${id}'})`;
+          const shuffle = states['switch.haze_pc_aleatorio'];
+          const shuffleOn = shuffle && shuffle.state === 'on';
+          const folder = `this.dispatchEvent(new CustomEvent('hass-more-info',{bubbles:true,composed:true,detail:{entityId:'select.haze_pc_reproducir_carpeta'}}))`;
           const playing = entity && entity.state === 'playing';
-          return btn('button.haze_pc_anterior', 'mdi:skip-previous', '') +
-            btn('button.haze_pc_play_pausa', playing ? 'mdi:pause' : 'mdi:play', 'main') +
-            btn('button.haze_pc_siguiente', 'mdi:skip-next', '');
+          return btn(`${callHass}.callService('switch','toggle',{entity_id:'switch.haze_pc_aleatorio'})`, 'mdi:shuffle-variant', shuffleOn ? 'on' : '') +
+            btn(press('button.haze_pc_anterior'), 'mdi:skip-previous', '') +
+            btn(press('button.haze_pc_play_pausa'), playing ? 'mdi:pause' : 'mdi:play', 'main') +
+            btn(press('button.haze_pc_siguiente'), 'mdi:skip-next', '') +
+            btn(folder, 'mdi:folder-music-outline', '');
         ]]]
     styles:
       card:
         - width: 393.6px
-        - height: 131.6px
+        - height: 202.2px
         - padding: 0
         - border: none
         - border-radius: 10.4px
         - box-shadow: none
+        - overflow: hidden
         - background: rgba(0, 0, 0, 0.15)
         - font-family: '"Inter Variable", system-ui'
         - color: rgb(255, 255, 255)
       grid:
-        - grid-template-areas: '"art info" "art ctl"'
-        - grid-template-columns: 131.6px minmax(0, 1fr)
-        - grid-template-rows: 1fr 1fr
+        - grid-template-areas: '"bg"'
+        - grid-template-columns: 1fr
+        - grid-template-rows: 1fr
       custom_fields:
-        art:
-          - width: 107px
-          - height: 107px
-          - border-radius: 8px
-          - overflow: hidden
-          - justify-self: center
-          - align-self: center
+        bg:
+          - position: absolute
+          - inset: 0
           - display: grid
           - place-items: center
-          - background: rgba(255, 255, 255, 0.06)
-          - color: rgba(255, 255, 255, 0.4)
+          - color: rgba(255, 255, 255, 0.25)
         info:
-          - justify-self: stretch
-          - align-self: end
-          - min-width: 0
-          - padding-right: 11.52px
+          - position: absolute
+          - left: 16px
+          - right: 16px
+          - bottom: 62px
           - text-align: left
         ctl:
-          - justify-self: start
-          - align-self: center
+          - position: absolute
+          - left: 0
+          - right: 0
+          - bottom: 10px
           - display: flex
-          - gap: 9.6px
+          - justify-content: center
+          - align-items: center
+          - gap: 18px
           - pointer-events: auto
     extra_styles: |
-      .t, .s { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .t { font-size: 15.2px; font-weight: 500; line-height: 19px; }
-      .s { font-size: 14.8px; line-height: 18px; color: rgba(255, 255, 255, 0.7); }
-      #art img { width: 100%; height: 100%; object-fit: cover; display: block; }
-      .b {
-        width: 44px; height: 44px; border-radius: 50%;
-        display: grid; place-items: center; cursor: pointer;
-        pointer-events: auto; background: rgba(255, 255, 255, 0.08);
+      #bg .pic { position: absolute; inset: 0; background-size: cover; background-position: center; }
+      #bg::after {
+        content: ''; position: absolute; inset: 0;
+        background: linear-gradient(180deg, rgba(10, 13, 16, 0) 0%, rgba(10, 13, 16, 0.35) 40%, rgba(10, 13, 16, 0.92) 78%, rgba(10, 13, 16, 0.97) 100%);
       }
-      .b.main { background: rgba(255, 255, 255, 0.85); color: rgb(48, 51, 52); }
-      .b:active { transform: scale(0.94); }
+      #bg ha-icon { --mdc-icon-size: 48px; margin-bottom: 70px; }
+      .t, .s { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .t { font-size: 16px; font-weight: 600; line-height: 20px; }
+      .s { font-size: 14px; line-height: 18px; color: rgba(255, 255, 255, 0.7); }
+      .b {
+        width: 40px; height: 40px; display: grid; place-items: center;
+        cursor: pointer; pointer-events: auto; color: rgba(255, 255, 255, 0.85);
+        border-radius: 50%; transition: transform 0.1s;
+      }
+      .b ha-icon { --mdc-icon-size: 24px; }
+      .b.on { color: rgb(242, 196, 107); }
+      .b.main { width: 46px; height: 46px; background: rgba(255, 255, 255, 0.92); color: rgb(30, 33, 36); }
+      .b.main ha-icon { --mdc-icon-size: 28px; }
+      .b:active { transform: scale(0.92); }
 
   fusion_title_next:
     template: fusion_title
@@ -941,25 +957,6 @@ views:
                         template: fusion_media
                         view_layout:
                           grid-column: span 2
-                      # Tap to pick a folder to play (select entity, more-info dropdown).
-                      - type: custom:button-card
-                        template: fusion_tile
-                        entity: select.haze_pc_reproducir_carpeta
-                        name: Folder
-                        icon: mdi:folder-music
-                        state_display: |
-                          [[[
-                            const s = states['sensor.haze_pc_estado'];
-                            return (s && s.attributes.context) || 'Pick one';
-                          ]]]
-                      - type: custom:button-card
-                        template: fusion_tile
-                        entity: switch.haze_pc_aleatorio
-                        name: Shuffle
-                        icon: mdi:shuffle-variant
-                        tap_action: { action: toggle }
-                        state_display: |
-                          [[[ return entity.state === 'on' ? 'On' : 'Off'; ]]]
               - type: vertical-stack
                 cards:
                   # Untitled: an invisible title (zero-width space) keeps these

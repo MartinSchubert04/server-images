@@ -88,7 +88,7 @@ tocar/arrastrar el resto = brillo), `fusion_time`, `fusion_uptime`, `fusion_titl
   `sensor.haze_pc_cancion`, `sensor.haze_pc_artista`, `image.haze_pc_caratula`,
   `button.haze_pc_anterior|play_pausa|siguiente`, `number.haze_pc_volumen`, `switch.haze_pc_aleatorio`,
   `select.haze_pc_repetir`, `select.haze_pc_reproducir_carpeta`. En el dashboard: template `fusion_media`
-  (tapa + título + controles, 2×2) y tiles Folder / Shuffle en la sección Media de Overview.
+  (tapa de fondo que se funde hacia abajo, título y controles: aleatorio, anterior, play, siguiente y carpeta, que abre el diálogo del select; 2 columnas × 3 filas) en la sección Media de Overview.
   El `media_player` universal de HA no sirve acá: no deja sobrescribir título ni artista.
 - **AdGuard marca 0 consultas:** el contenedor no publica el puerto 53; nadie lo usa como DNS.
 - **Wi-Fi del server en perfil "Público":** Docker Desktop bloquea las entradas en redes públicas, así que `192.168.0.100`
