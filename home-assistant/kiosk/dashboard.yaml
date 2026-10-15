@@ -502,7 +502,9 @@ button_card_templates:
           const img = states['image.haze_pc_caratula'];
           const on = entity && ['playing', 'paused'].includes(entity.state);
           const pic = on && img && img.state !== 'unavailable' && img.attributes.entity_picture;
-          return pic ? `<div class="pic" style="background-image:url('${pic}')"></div>` : `<ha-icon icon="mdi:music"></ha-icon>`;
+          // La URL del proxy no cambia con la tapa: el estado (fecha de la ultima tapa) evita que quede la vieja en cache.
+          const src = pic && `${pic}&v=${encodeURIComponent(img.state)}`;
+          return pic ? `<div class="pic" style="background-image:url('${src}')"></div>` : `<ha-icon icon="mdi:music"></ha-icon>`;
         ]]]
       info: |
         [[[
