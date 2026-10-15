@@ -89,7 +89,7 @@ button_card_templates:
         - line-height: 18px
         - color: rgba(255, 255, 255, 0.7)
     state:
-      - value: 'on'
+      - value: "on"
         id: active_on
         styles: &active
           card:
@@ -163,7 +163,7 @@ button_card_templates:
           - right: 0
           - pointer-events: auto
     state:
-      - value: 'on'
+      - value: "on"
         id: active_on
         styles:
           card:
@@ -486,20 +486,20 @@ button_card_templates:
   # card and fades to dark at the bottom, where title, artist and the controls sit.
   # Folder opens HA's own dialog for the select entity. Double width, triple height.
   fusion_media:
-    entity: sensor.haze_pc_estado
+    entity: sensor.haze_mrtn_main_estado
     show_name: false
     show_state: false
     show_icon: false
     tap_action: { action: none }
     hold_action: { action: none }
     triggers_update:
-      - sensor.haze_pc_cancion
-      - image.haze_pc_caratula
-      - switch.haze_pc_aleatorio
+      - sensor.haze_mrtn_main_cancion
+      - image.haze_mrtn_main_caratula
+      - switch.haze_mrtn_main_aleatorio
     custom_fields:
       bg: |
         [[[
-          const img = states['image.haze_pc_caratula'];
+          const img = states['image.haze_mrtn_main_caratula'];
           const on = entity && ['playing', 'paused'].includes(entity.state);
           const pic = on && img && img.state !== 'unavailable' && img.attributes.entity_picture;
           // La URL del proxy no cambia con la tapa: el estado (fecha de la ultima tapa) evita que quede la vieja en cache.
@@ -523,14 +523,14 @@ button_card_templates:
             `<div class="b ${cls}" onpointerup="${stop};${action}" onpointerdown="${stop}" onclick="${stop}" ` +
             `onmousedown="${stop}" ontouchstart="${stop}"><ha-icon icon="${icon}"></ha-icon></div>`;
           const press = (id) => `${callHass}.callService('button','press',{entity_id:'${id}'})`;
-          const shuffle = states['switch.haze_pc_aleatorio'];
+          const shuffle = states['switch.haze_mrtn_main_aleatorio'];
           const shuffleOn = shuffle && shuffle.state === 'on';
-          const folder = `this.dispatchEvent(new CustomEvent('hass-more-info',{bubbles:true,composed:true,detail:{entityId:'select.haze_pc_reproducir_carpeta'}}))`;
+          const folder = `this.dispatchEvent(new CustomEvent('hass-more-info',{bubbles:true,composed:true,detail:{entityId:'select.haze_mrtn_main_reproducir_carpeta'}}))`;
           const playing = entity && entity.state === 'playing';
-          return btn(`${callHass}.callService('switch','toggle',{entity_id:'switch.haze_pc_aleatorio'})`, 'mdi:shuffle-variant', shuffleOn ? 'on' : '') +
-            btn(press('button.haze_pc_anterior'), 'mdi:skip-previous', '') +
-            btn(press('button.haze_pc_play_pausa'), playing ? 'mdi:pause' : 'mdi:play', 'main') +
-            btn(press('button.haze_pc_siguiente'), 'mdi:skip-next', '') +
+          return btn(`${callHass}.callService('switch','toggle',{entity_id:'switch.haze_mrtn_main_aleatorio'})`, 'mdi:shuffle-variant', shuffleOn ? 'on' : '') +
+            btn(press('button.haze_mrtn_main_anterior'), 'mdi:skip-previous', '') +
+            btn(press('button.haze_mrtn_main_play_pausa'), playing ? 'mdi:pause' : 'mdi:play', 'main') +
+            btn(press('button.haze_mrtn_main_siguiente'), 'mdi:skip-next', '') +
             btn(folder, 'mdi:folder-music-outline', '');
         ]]]
     styles:
@@ -933,7 +933,8 @@ views:
                         name: Stopwatch
                         icon: mdi:timer-outline
                         show_state: false
-                        tap_action: { action: navigate, navigation_path: stopwatch }
+                        tap_action:
+                          { action: navigate, navigation_path: stopwatch }
                         custom_fields:
                           s: |
                             [[[ return `<span class="swt">${window.__sw ? window.__sw.fmt(window.__sw.ms()) : '00:00'}</span>`; ]]]

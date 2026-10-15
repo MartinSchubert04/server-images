@@ -14,15 +14,15 @@ Estado al 2026-10-15. Para retomar en otra sesión. El usuario habla en español
 
 ## Archivos (repo `docker-images`, remoto `MartinSchubert04/server-images`, rama `main`)
 
-| Archivo | Qué es |
-|---|---|
-| `home-assistant/kiosk/dashboard.yaml` | **Fuente del dashboard.** Una vista por pestaña. Templates de button-card al principio. |
-| `home-assistant/kiosk/build_dashboard.py` | Une las vistas en **una sola vista** (path `overview`) con páginas que se muestran/ocultan por `#hash`. Así el sidebar no se redibuja al cambiar de pestaña. |
-| `home-assistant/kiosk/deploy.sh` | Corre el build dentro del contenedor y deja el JSON en `/config/www/kiosk/kd.json`. |
-| `home-assistant/kiosk/mrtn-kiosk.yaml` | Tema "MRTN Kiosk" (se copia a `/config/themes/`). Se aplica por vista (`theme:`), no por usuario. |
-| `home-assistant/kiosk/kiosk.css` | `@font-face` de Inter (recurso de Lovelace `/local/kiosk/kiosk.css`). |
-| `home-assistant/kiosk/map.html` | Mapa Leaflet + MapTiler `streets-v2-dark`. En el repo tiene `__MAPTILER_KEY__`; la clave real se inserta solo en la copia de `/config/www/kiosk/map.html` (sale de `ha-fusion/configuration.yaml`, que está en .gitignore). |
-| `home-assistant/home-assistant-init/packages/kiosk.yaml` | Automatizaciones y helpers del kiosco y luces. `init.sh` copia `packages/*.yaml` a `/config/packages` al arrancar. |
+| Archivo                                                  | Qué es                                                                                                                                                                                                                      |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `home-assistant/kiosk/dashboard.yaml`                    | **Fuente del dashboard.** Una vista por pestaña. Templates de button-card al principio.                                                                                                                                     |
+| `home-assistant/kiosk/build_dashboard.py`                | Une las vistas en **una sola vista** (path `overview`) con páginas que se muestran/ocultan por `#hash`. Así el sidebar no se redibuja al cambiar de pestaña.                                                                |
+| `home-assistant/kiosk/deploy.sh`                         | Corre el build dentro del contenedor y deja el JSON en `/config/www/kiosk/kd.json`.                                                                                                                                         |
+| `home-assistant/kiosk/mrtn-kiosk.yaml`                   | Tema "MRTN Kiosk" (se copia a `/config/themes/`). Se aplica por vista (`theme:`), no por usuario.                                                                                                                           |
+| `home-assistant/kiosk/kiosk.css`                         | `@font-face` de Inter (recurso de Lovelace `/local/kiosk/kiosk.css`).                                                                                                                                                       |
+| `home-assistant/kiosk/map.html`                          | Mapa Leaflet + MapTiler `streets-v2-dark`. En el repo tiene `__MAPTILER_KEY__`; la clave real se inserta solo en la copia de `/config/www/kiosk/map.html` (sale de `ha-fusion/configuration.yaml`, que está en .gitignore). |
+| `home-assistant/home-assistant-init/packages/kiosk.yaml` | Automatizaciones y helpers del kiosco y luces. `init.sh` copia `packages/*.yaml` a `/config/packages` al arrancar.                                                                                                          |
 
 En el contenedor (`/config/www/kiosk/`): fondo `muted_background.webp`, fuentes Inter,
 íconos `meteocons/`, `map.html` con clave. Backups del dashboard en
@@ -34,9 +34,13 @@ En el contenedor (`/config/www/kiosk/`): fondo `muted_background.webp`, fuentes 
 2. `sh home-assistant/kiosk/deploy.sh` (Git Bash).
 3. Guardar en HA desde un navegador logueado (Claude in Chrome, pestaña en `http://mrtn-server:8123/dashboard-kiosk/overview?disable_km`):
    ```js
-   const hass = document.querySelector('home-assistant').hass;
-   const cfg = await (await fetch('/local/kiosk/kd.json?' + Date.now())).json();
-   await hass.callWS({type: 'lovelace/config/save', url_path: 'dashboard-kiosk', config: cfg});
+   const hass = document.querySelector("home-assistant").hass;
+   const cfg = await (await fetch("/local/kiosk/kd.json?" + Date.now())).json();
+   await hass.callWS({
+     type: "lovelace/config/save",
+     url_path: "dashboard-kiosk",
+     config: cfg,
+   });
    ```
 4. Borrar el JSON temporal (lo sirve `/local` sin login): `MSYS_NO_PATHCONV=1 docker exec homeassistant rm -f /config/www/kiosk/kd.json`
 5. Recargar el kiosco: `button.touchkio_mrtn_hub_refresh` (recarga la página actual).
@@ -84,10 +88,10 @@ tocar/arrastrar el resto = brillo), `fusion_time`, `fusion_uptime`, `fusion_titl
 
 - **Media = Haze** (reproductor de escritorio, repo `MartinSchubert04/Haze`, local en `Projects/Haze`):
   publica por MQTT (usuario `haze`, clave `MQTT_HAZE_PASSWORD` en `.env`) y crea por discovery el
-  dispositivo "Haze PC": `sensor.haze_pc_estado` (atributos title, artist, context, volume...),
-  `sensor.haze_pc_cancion`, `sensor.haze_pc_artista`, `image.haze_pc_caratula`,
-  `button.haze_pc_anterior|play_pausa|siguiente`, `number.haze_pc_volumen`, `switch.haze_pc_aleatorio`,
-  `select.haze_pc_repetir`, `select.haze_pc_reproducir_carpeta`. En el dashboard: template `fusion_media`
+  dispositivo "Haze PC": `sensor.haze_mrtn_main_estado` (atributos title, artist, context, volume...),
+  `sensor.haze_mrtn_main_cancion`, `sensor.haze_mrtn_main_artista`, `image.haze_mrtn_main_caratula`,
+  `button.haze_mrtn_main_anterior|play_pausa|siguiente`, `number.haze_mrtn_main_volumen`, `switch.haze_mrtn_main_aleatorio`,
+  `select.haze_mrtn_main_repetir`, `select.haze_mrtn_main_reproducir_carpeta`. En el dashboard: template `fusion_media`
   (tapa de fondo que se funde hacia abajo, título y controles: aleatorio, anterior, play, siguiente y carpeta, que abre el diálogo del select; 2 columnas × 3 filas) en la sección Media de Overview.
   El `media_player` universal de HA no sirve acá: no deja sobrescribir título ni artista.
 - **AdGuard marca 0 consultas:** el contenedor no publica el puerto 53; nadie lo usa como DNS.
