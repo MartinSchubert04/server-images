@@ -46,8 +46,9 @@ Si cambia el tema: `docker cp kiosk/mrtn-kiosk.yaml homeassistant:/config/themes
 Si cambia `kiosk.yaml`: copiar a `/config/packages/`, `check_config`, y recargar `automation`, `input_number`,
 `input_datetime` (no hace falta reiniciar HA).
 
-Alternativa ofrecida y pendiente: un `deploy-kiosk.ps1` que guarde por WebSocket con un token de larga duración
-(`HA_TOKEN` en `home-assistant/.env`). El usuario todavía no lo pidió.
+**Con token (lo normal):** si `home-assistant/.env` tiene `HA_TOKEN=` (token de larga duración de HA), `deploy.sh` hace
+todo solo: build, guardado por WebSocket (`save_dashboard.py`), borra `kd.json` y recarga el kiosco. Los pasos 3 a 5
+solo hacen falta sin token.
 
 ## Pestañas (dashboard.yaml)
 
