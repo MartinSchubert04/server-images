@@ -103,7 +103,7 @@ tocar/arrastrar el resto = brillo), `fusion_time`, `fusion_uptime`, `fusion_titl
 - layout-card: `card_margin: 0` se ignora en la vista; el margen sale de `--masonry-view-card-margin` (puesto en 0 en el tema).
 - button-card evalúa los `[[[ ]]]` de las tarjetas anidadas en `custom_fields.card` con el contexto del padre: no anidar
   cards con plantillas dentro de un button-card.
-- En plantillas de button-card no usar el nombre de variable `html` (choca con lit). El código va antes del `return`.
+- En plantillas de button-card no usar los nombres de variable `html` (choca con lit) ni `hass` (ya existe en el contexto). El código va antes del `return`.
 - Las `variables` de button-card se evalúan antes que los `custom_fields`.
 - button-card pone `pointer-events: none` en los custom fields: hay que habilitarlo. En touch cancela el `click`:
   usar `onpointerup` y cortar la propagación.

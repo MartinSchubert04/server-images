@@ -512,10 +512,11 @@ button_card_templates:
         ]]]
       ctl: |
         [[[
-          const hass = `(this.getRootNode().host.hass||document.querySelector('home-assistant').hass)`;
+          // No llamarla `hass`: button-card ya define esa variable y redeclararla rompe la plantilla.
+          const callHass = `(this.getRootNode().host.hass||document.querySelector('home-assistant').hass)`;
           const stop = 'event.stopPropagation()';
           const btn = (id, icon, cls) =>
-            `<div class="b ${cls}" onpointerup="${stop};${hass}.callService('button','press',{entity_id:'${id}'})" ` +
+            `<div class="b ${cls}" onpointerup="${stop};${callHass}.callService('button','press',{entity_id:'${id}'})" ` +
             `onpointerdown="${stop}" onclick="${stop}" onmousedown="${stop}" ontouchstart="${stop}"><ha-icon icon="${icon}"></ha-icon></div>`;
           const playing = entity && entity.state === 'playing';
           return btn('button.haze_pc_anterior', 'mdi:skip-previous', '') +
