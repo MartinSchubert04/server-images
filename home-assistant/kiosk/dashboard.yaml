@@ -485,9 +485,11 @@ button_card_templates:
   # Haze, the desktop music player (MQTT entities, one device per PC): the cover fills the
   # card and fades to dark at the bottom, where title, artist and the controls sit.
   # Which Haze it shows comes from input_select.kiosk_haze (entity prefix, e.g. haze_pc);
-  # the three dots at the top right open its dialog (a dropdown). Entity ids are built from it, so
+  # the three dots at the top right open group.kiosk_media: a dialog with that dropdown and
+  # one for the size (input_select.kiosk_media_tamano). Entity ids are built from it, so
   # triggers_update can't list them: "all" re-renders on any change (cheap, 3 templates).
-  # Folder opens HA's own dialog for the select entity. Double width, triple height.
+  # Folder opens HA's own dialog for the select entity.
+  # Size in grid tiles (192 x 96.3 px, 9.6 px gap): the card spans that many columns.
   fusion_media:
     entity: input_select.kiosk_haze
     show_name: false
@@ -496,6 +498,12 @@ button_card_templates:
     tap_action: { action: none }
     hold_action: { action: none }
     triggers_update: all
+    variables:
+      size: |
+        [[[
+          const t = states['input_select.kiosk_media_tamano'];
+          return { Chica: [2, 2], Ancha: [3, 2], Grande: [3, 4] }[t && t.state] || [2, 2];
+        ]]]
     custom_fields:
       bg: |
         [[[
@@ -520,7 +528,7 @@ button_card_templates:
       dev: |
         [[[
           const stop = 'event.stopPropagation()';
-          const open = `this.dispatchEvent(new CustomEvent('hass-more-info',{bubbles:true,composed:true,detail:{entityId:'input_select.kiosk_haze'}}))`;
+          const open = `this.dispatchEvent(new CustomEvent('hass-more-info',{bubbles:true,composed:true,detail:{entityId:'group.kiosk_media'}}))`;
           return `<div class="d" onpointerup="${stop};${open}" onpointerdown="${stop}" onclick="${stop}" ` +
             `onmousedown="${stop}" ontouchstart="${stop}"><ha-icon icon="mdi:dots-vertical"></ha-icon></div>`;
         ]]]
@@ -547,8 +555,8 @@ button_card_templates:
         ]]]
     styles:
       card:
-        - width: 393.6px
-        - height: 202.2px
+        - width: '[[[ return `${variables.size[0] * 192 + (variables.size[0] - 1) * 9.6}px`; ]]]'
+        - height: '[[[ return `${variables.size[1] * 96.3 + (variables.size[1] - 1) * 9.6}px`; ]]]'
         - padding: 0
         - border: none
         - border-radius: 10.4px
@@ -588,7 +596,9 @@ button_card_templates:
           - position: absolute
           - top: 6px
           - right: 4px
+    # The grid cell follows the size: !important beats the inline span that layout-card sets.
     extra_styles: |
+      [[[ return `:host { grid-column: span ${variables.size[0]} !important; }
       .d {
         width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%;
         cursor: pointer; color: rgba(255, 255, 255, 0.85); filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
@@ -613,7 +623,7 @@ button_card_templates:
       .b.on { color: rgb(242, 196, 107); }
       .b.main { width: 46px; height: 46px; background: rgba(255, 255, 255, 0.92); color: rgb(30, 33, 36); }
       .b.main ha-icon { --mdc-icon-size: 28px; }
-      .b:active { transform: scale(0.92); }
+      .b:active { transform: scale(0.92); }` ]]]
 
   fusion_title_next:
     template: fusion_title

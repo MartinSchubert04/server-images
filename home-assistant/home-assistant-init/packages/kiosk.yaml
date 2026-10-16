@@ -69,11 +69,28 @@ input_number:
 # primero: es la opción por defecto cuando no hay ninguna elegida.
 input_select:
   kiosk_haze:
-    name: "Kiosco: Haze a mostrar"
+    name: "Haze"
     icon: mdi:music-box-multiple
     options:
       - haze_mrtn_main
       - haze_pc
+  # Tamaño de la tarjeta Media en tiles de la grilla: Chica 2×2, Ancha 3×2, Grande 3×4
+  # (en el kiosco de 5" la columna entra 3 tiles de ancho).
+  kiosk_media_tamano:
+    name: "Tamaño"
+    icon: mdi:resize
+    options:
+      - Chica
+      - Ancha
+      - Grande
+
+# Lo que abren los tres puntos de la tarjeta Media: un diálogo con los dos desplegables.
+group:
+  kiosk_media:
+    name: "Media"
+    entities:
+      - input_select.kiosk_haze
+      - input_select.kiosk_media_tamano
 
 automation:
   # Lista de Haze para input_select.kiosk_haze: un Haze nuevo aparece solo al crearse sus entidades
