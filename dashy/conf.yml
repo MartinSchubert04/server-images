@@ -22,15 +22,15 @@ sections:
       - title: Home Assistant
         description: Panel de la casa
         icon: hl-home-assistant
-        url: http://192.168.1.100:8123
+        url: http://mrtn-server.tailbce521.ts.net:8123
       - title: ESPHome
         description: Firmware de los ESP
         icon: hl-esphome
-        url: http://192.168.1.100:6052
+        url: http://mrtn-server.tailbce521.ts.net:6052
       - title: Frigate
         description: Cámaras y detección
         icon: hl-frigate
-        url: http://192.168.1.100:5000
+        url: http://mrtn-server.tailbce521.ts.net:5000
       - title: RuView
         description: Presencia por WiFi · Solo por Tailscale
         icon: fas fa-wifi
@@ -43,21 +43,20 @@ sections:
       - title: AdGuard Home
         description: DNS y bloqueo de ads
         icon: hl-adguard-home
-        url: http://192.168.1.100:3000
+        url: http://mrtn-server.tailbce521.ts.net:3000
       - title: Glances
         description: Uso de CPU, RAM y disco
         icon: hl-glances
-        url: http://192.168.1.100:61208
+        url: http://mrtn-server.tailbce521.ts.net:61208
       - title: Kopia
         description: Backups
         icon: hl-kopia
-        url: http://192.168.1.100:51515
+        url: http://mrtn-server.tailbce521.ts.net:51515
         statusCheckAcceptCodes: "401"
       - title: Consumo PC
         description: Solo por Tailscale
         icon: fas fa-bolt
         url: https://consumo.tailbce521.ts.net
-        statusCheck: false
 
   - name: Automatización
     icon: fas fa-robot
@@ -65,18 +64,16 @@ sections:
       - title: n8n
         description: Workflows
         icon: hl-n8n
-        url: http://192.168.1.100:5678
+        url: http://mrtn-server.tailbce521.ts.net:5678
       - title: WAHA
         description: API de WhatsApp
         icon: hl-whatsapp
-        url: http://192.168.1.100:3001/dashboard
+        url: http://mrtn-server.tailbce521.ts.net:3001/dashboard
       - title: Job Autoapply
         description: Solo por Tailscale
         icon: fas fa-briefcase
         url: http://mrtn-server.tailbce521.ts.net:4517
-        statusCheck: false
       - title: Autoapply noVNC
         description: Solo por Tailscale
         icon: fas fa-display
         url: http://mrtn-server.tailbce521.ts.net:6080
-        statusCheck: false
