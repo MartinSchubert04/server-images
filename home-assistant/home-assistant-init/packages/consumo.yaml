@@ -290,13 +290,13 @@ rest:
         unit_of_measurement: "%"
         state_class: measurement
         icon: mdi:memory
-        value_template: "{{ (value_json.gpu.vram_usado / value_json.gpu.vram_total * 100) | round(1) }}"
+        value_template: "{{ (value_json.gpu.vram_usado / value_json.gpu.vram_total * 100) | round(1) if value_json.gpu.vram_total else none }}"
       - name: "Server RAM uso"
         unique_id: consumo_server_ram_uso
         unit_of_measurement: "%"
         state_class: measurement
         icon: mdi:memory
-        value_template: "{{ (value_json.ram.usado / value_json.ram.total * 100) | round(1) }}"
+        value_template: "{{ (value_json.ram.usado / value_json.ram.total * 100) | round(1) if value_json.ram.total else none }}"
       - name: "Server RAM usada"
         unique_id: consumo_server_ram_usada
         unit_of_measurement: "GB"

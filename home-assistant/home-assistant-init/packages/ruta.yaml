@@ -31,7 +31,10 @@ rest:
     sensor:
       - name: "Ruta origen"
         unique_id: ruta_origen_coordenadas
-        availability: "{{ states('input_text.ruta_origen') not in ['unknown', 'unavailable', ''] }}"
+        # Nominatim devuelve [] si no encuentra la dirección o si la consulta fue vacía
+        availability: >-
+          {{ states('input_text.ruta_origen') not in ['unknown', 'unavailable', '']
+             and value_json is defined and value_json is list and value_json | count > 0 }}
         icon: mdi:home-map-marker
         value_template: "{{ value_json[0].lat }},{{ value_json[0].lon }}"
         json_attributes_path: "$[0]"
@@ -50,7 +53,9 @@ rest:
     sensor:
       - name: "Ruta destino"
         unique_id: ruta_destino_coordenadas
-        availability: "{{ states('input_text.ruta_destino') not in ['unknown', 'unavailable', ''] }}"
+        availability: >-
+          {{ states('input_text.ruta_destino') not in ['unknown', 'unavailable', '']
+             and value_json is defined and value_json is list and value_json | count > 0 }}
         icon: mdi:map-marker
         value_template: "{{ value_json[0].lat }},{{ value_json[0].lon }}"
         json_attributes_path: "$[0]"
@@ -71,7 +76,7 @@ rest:
     sensor:
       - name: "Ruta tiempo"
         unique_id: ruta_tiempo
-        availability: "{{ value_json.routes is defined }}"
+        availability: "{{ value_json is defined and value_json.routes is defined }}"
         unit_of_measurement: "min"
         device_class: duration
         state_class: measurement
@@ -80,7 +85,7 @@ rest:
       # Lo que agrega el tráfico de ahora sobre el mismo viaje con la calle libre
       - name: "Ruta demora"
         unique_id: ruta_demora
-        availability: "{{ value_json.routes is defined }}"
+        availability: "{{ value_json is defined and value_json.routes is defined }}"
         unit_of_measurement: "min"
         device_class: duration
         state_class: measurement
@@ -90,7 +95,7 @@ rest:
           {{ [((s.travelTimeInSeconds - s.noTrafficTravelTimeInSeconds) / 60) | round, 0] | max }}
       - name: "Ruta distancia"
         unique_id: ruta_distancia
-        availability: "{{ value_json.routes is defined }}"
+        availability: "{{ value_json is defined and value_json.routes is defined }}"
         unit_of_measurement: "km"
         device_class: distance
         state_class: measurement
