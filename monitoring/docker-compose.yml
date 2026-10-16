@@ -1,0 +1,88 @@
+services:
+  # Logs en vivo de todos los contenedores
+  dozzle:
+    container_name: dozzle
+    image: amir20/dozzle:latest
+    networks:
+      - monitoring
+    environment:
+      DOCKER_HOST: tcp://socket-proxy:2375
+      # Usuarios en ./dozzle/users.yml (no se versiona): los logs pueden traer tokens
+      DOZZLE_AUTH_PROVIDER: simple
+      TZ: ${TZ}
+    volumes:
+      - ./dozzle:/data
+    ports:
+      - "8080:8080"
+    depends_on:
+      - socket-proxy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+
+  # Métricas con historial y alertas. La base (SQLite) queda en ./beszel_data
+  beszel:
+    container_name: beszel
+    image: henrygd/beszel:latest
+    networks:
+      - monitoring
+    environment:
+      TZ: ${TZ}
+    volumes:
+      - ./beszel_data:/beszel_data
+    ports:
+      - "8090:8090"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  # Sin puertos publicados: el hub le habla por la red interna, en beszel-agent:45876.
+  # CPU, RAM y disco son los de la VM de WSL; la red es la del contenedor, no la de Windows.
+  beszel-agent:
+    container_name: beszel-agent
+    image: henrygd/beszel-agent:latest
+    networks:
+      - monitoring
+    environment:
+      LISTEN: 45876
+      # Clave pública del hub: ssh-keygen -y -f beszel_data/id_ed25519
+      KEY: ${BESZEL_KEY}
+      DOCKER_HOST: tcp://socket-proxy:2375
+    depends_on:
+      - socket-proxy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 64M
+
+  # Lo único que Dozzle y el agente pueden pedirle a Docker: listar contenedores, sus logs,
+  # stats y eventos. Sin POST: no pueden prender, apagar, crear ni borrar nada.
+  socket-proxy:
+    container_name: monitoring-socket-proxy
+    image: tecnativa/docker-socket-proxy
+    networks:
+      - monitoring
+    environment:
+      CONTAINERS: 1
+      EVENTS: 1
+      INFO: 1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 64M
+
+networks:
+  monitoring:
+    name: monitoring

@@ -16,6 +16,8 @@ levanta con `docker compose up -d` desde adentro.
 | `waha` | WAHA | 3001 | API de WhatsApp |
 | `dashy` | Dashy | 4000 | Portada con links a todo |
 | `kopia` | Kopia | 51515 | Backups |
+| `monitoring` | Dozzle | 8080 | Logs en vivo de todos los contenedores |
+| `monitoring` | Beszel | 8090 | Métricas del server y los contenedores, con alertas |
 
 ## Levantar desde cero
 
@@ -40,6 +42,18 @@ El dashboard Home tiene las pestañas Weather y Traffic, y un resumen de ambas e
 - **Tarjetas:** `weather-forecast-card.js` y `windy-card.js` van en `/config/www/weather-cards`;
   los links de descarga están en `athanor/build_home_dashboard.py`.
 - `athanor/build_home_dashboard.py` se corre con el contenedor de Home Assistant detenido.
+
+## Monitoreo
+
+`monitoring` levanta Dozzle (logs) y Beszel (métricas, unos 30 días de historial). Los dos leen
+Docker a través de un socket-proxy que solo deja listar contenedores, logs, stats y eventos.
+
+- **Dozzle:** el usuario está en `monitoring/dozzle/users.yml`. Para crear otro o cambiar la clave:
+  `docker run --rm amir20/dozzle generate <usuario> --password <clave>` y pegar la salida ahí.
+- **Beszel:** la primera vez que se entra al hub se crea la cuenta. El sistema se agrega desde
+  "Add system" con host `beszel-agent` y puerto `45876`. La clave del hub se genera al levantarlo
+  por primera vez y va en `BESZEL_KEY` del `.env`: `ssh-keygen -y -f monitoring/beszel_data/id_ed25519`.
+- CPU, RAM y disco son los de la VM de WSL, no los de Windows. Para Windows está Glances.
 
 ## Backups
 

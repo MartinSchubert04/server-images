@@ -30,3 +30,7 @@ home-assistant/mosquitto/config/passwd
 
 # ha-fusion: configuration.yaml holds an HA long-lived token
 home-assistant/ha-fusion/
+
+# Monitoring: users.yml holds password hashes, beszel_data the hub's private key and its database
+monitoring/dozzle/
+monitoring/beszel_data/
