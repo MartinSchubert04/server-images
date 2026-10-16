@@ -24,7 +24,7 @@ sensor:
 shell_command:
   limpiar_snapshots: "rm -f /config/www/snapshots/captura_*.jpg"
   apagar_pc: 'ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i /config/.ssh/id_ed25519 martin@192.168.1.33 "shutdown /s /t 0"'
-  wake_pc: 'ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i /config/.ssh/id_ed25519 tincho@192.168.1.100 "powershell wake_on_lan.ps1"'
+  wake_pc: 'ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i /config/.ssh/id_ed25519 tincho@192.168.0.100 "powershell wake_on_lan.ps1"'
 
 http:
   use_x_forwarded_for: true

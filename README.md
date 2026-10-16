@@ -1,6 +1,6 @@
 # docker-images
 
-Stacks de Docker Compose de `mrtn-server` (192.168.1.100). Una carpeta por stack; cada una se
+Stacks de Docker Compose de `mrtn-server` (192.168.0.100). Una carpeta por stack; cada una se
 levanta con `docker compose up -d` desde adentro.
 
 ## Servicios
