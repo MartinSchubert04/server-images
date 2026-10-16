@@ -9,8 +9,8 @@ services:
       - ./conf:/opt/adguardhome/conf
     ports:
       # Bound to the LAN IP: Windows ICS already holds 0.0.0.0:53
-      - "192.168.1.100:53:53/tcp"
-      - "192.168.1.100:53:53/udp"
+      - "192.168.0.100:53:53/tcp"
+      - "192.168.0.100:53:53/udp"
       - "3000:3000"
     restart: unless-stopped
     deploy:
