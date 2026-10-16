@@ -28,8 +28,6 @@ home-assistant/frigate/config/*
 home-assistant/frigate/media/
 home-assistant/mosquitto/config/passwd
 
-# ha-fusion: configuration.yaml holds an HA long-lived token
-home-assistant/ha-fusion/
 
 # Monitoring: users.yml holds password hashes, beszel_data the hub's private key and its database
 monitoring/dozzle/

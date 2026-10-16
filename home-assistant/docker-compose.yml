@@ -55,25 +55,6 @@ services:
           cpus: "2"
           memory: 1G
 
-  ha-fusion:
-    container_name: ha-fusion
-    image: ghcr.io/knowald/ha-fusion:latest
-    networks:
-      - home
-    volumes:
-      - ./ha-fusion:/app/data
-    environment:
-      TZ: ${TZ}
-      HASS_URL: http://192.168.0.100:8123
-    ports:
-      - "5050:5050"
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: "0.5"
-          memory: 256M
-
   frigate:
     container_name: frigate
     image: ghcr.io/blakeblackshear/frigate:stable-tensorrt
