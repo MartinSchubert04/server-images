@@ -62,6 +62,24 @@ input_number:
     step: 5
     unit_of_measurement: "%"
     mode: slider
+  # Tamaño de la tarjeta Media en tiles de la grilla (192 × 96 px cada uno): ancho × alto.
+  # Mínimo 2 × 2 para que entren los controles; en el kiosco de 5" la columna entra 3 tiles de ancho.
+  kiosk_media_ancho:
+    name: "Ancho"
+    icon: mdi:arrow-expand-horizontal
+    min: 2
+    max: 4
+    step: 1
+    unit_of_measurement: "tiles"
+    mode: slider
+  kiosk_media_alto:
+    name: "Alto"
+    icon: mdi:arrow-expand-vertical
+    min: 2
+    max: 6
+    step: 1
+    unit_of_measurement: "tiles"
+    mode: slider
 
 # Qué Haze muestra la tarjeta Media del kiosco (los tres puntos de arriba a la derecha abren un desplegable).
 # Cada opción es el prefijo de las entidades de un Haze ("haze_pc" → sensor.haze_pc_estado, ...).
@@ -74,23 +92,15 @@ input_select:
     options:
       - haze_mrtn_main
       - haze_pc
-  # Tamaño de la tarjeta Media en tiles de la grilla: Chica 2×2, Ancha 3×2, Grande 3×4
-  # (en el kiosco de 5" la columna entra 3 tiles de ancho).
-  kiosk_media_tamano:
-    name: "Tamaño"
-    icon: mdi:resize
-    options:
-      - Chica
-      - Ancha
-      - Grande
 
-# Lo que abren los tres puntos de la tarjeta Media: un diálogo con los dos desplegables.
+# Lo que abren los tres puntos de la tarjeta Media: un diálogo con el desplegable de Haze y el tamaño.
 group:
   kiosk_media:
     name: "Media"
     entities:
       - input_select.kiosk_haze
-      - input_select.kiosk_media_tamano
+      - input_number.kiosk_media_ancho
+      - input_number.kiosk_media_alto
 
 automation:
   # Lista de Haze para input_select.kiosk_haze: un Haze nuevo aparece solo al crearse sus entidades

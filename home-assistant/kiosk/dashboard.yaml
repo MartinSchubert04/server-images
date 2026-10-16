@@ -486,7 +486,7 @@ button_card_templates:
   # card and fades to dark at the bottom, where title, artist and the controls sit.
   # Which Haze it shows comes from input_select.kiosk_haze (entity prefix, e.g. haze_pc);
   # the three dots at the top right open group.kiosk_media: a dialog with that dropdown and
-  # one for the size (input_select.kiosk_media_tamano). Entity ids are built from it, so
+  # two sliders for the size (input_number.kiosk_media_ancho × kiosk_media_alto). Entity ids are built from it, so
   # triggers_update can't list them: "all" re-renders on any change (cheap, 3 templates).
   # Folder opens HA's own dialog for the select entity.
   # Size in grid tiles (192 x 96.3 px, 9.6 px gap): the card spans that many columns.
@@ -501,8 +501,8 @@ button_card_templates:
     variables:
       size: |
         [[[
-          const t = states['input_select.kiosk_media_tamano'];
-          return { Chica: [2, 2], Ancha: [3, 2], Grande: [3, 4] }[t && t.state] || [2, 2];
+          const n = (id) => Math.max(2, Math.round(Number(states[`input_number.kiosk_media_${id}`]?.state)) || 2);
+          return [n('ancho'), n('alto')];
         ]]]
     custom_fields:
       bg: |
