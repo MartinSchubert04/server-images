@@ -596,12 +596,14 @@ button_card_templates:
           - position: absolute
           - top: 6px
           - right: 4px
+          - z-index: 2
+          - pointer-events: auto
     # The grid cell follows the size: !important beats the inline span that layout-card sets.
     extra_styles: |
       [[[ return `:host { grid-column: span ${variables.size[0]} !important; }
       .d {
         width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%;
-        cursor: pointer; color: rgba(255, 255, 255, 0.85); filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
+        cursor: pointer; pointer-events: auto; color: rgba(255, 255, 255, 0.85); filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
       }
       .d ha-icon { --mdc-icon-size: 22px; }
       .d:active { transform: scale(0.92); }
