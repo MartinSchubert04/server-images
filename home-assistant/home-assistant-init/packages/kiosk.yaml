@@ -63,9 +63,10 @@ input_number:
     unit_of_measurement: "%"
     mode: slider
 
-# Qué Haze muestra la tarjeta Media del kiosco (el chip de arriba a la derecha pasa al siguiente).
+# Qué Haze muestra la tarjeta Media del kiosco (los tres puntos de arriba a la derecha abren un desplegable).
 # Cada opción es el prefijo de las entidades de un Haze ("haze_pc" → sensor.haze_pc_estado, ...).
-# La automatización kiosk_haze_opciones rearma la lista con los Haze que existan.
+# La automatización kiosk_haze_opciones rearma la lista con los Haze que existan, con haze_mrtn_main
+# primero: es la opción por defecto cuando no hay ninguna elegida.
 input_select:
   kiosk_haze:
     name: "Kiosco: Haze a mostrar"
@@ -88,8 +89,9 @@ automation:
         event_type: entity_registry_updated
     variables:
       haze: >-
-        {{ integration_entities('mqtt') | select('match', 'sensor\.haze_.*_estado$')
-           | map('regex_replace', '^sensor\.(.*)_estado$', '\\1') | sort | list }}
+        {% set todos = integration_entities('mqtt') | select('match', 'sensor\.haze_.*_estado$')
+             | map('regex_replace', '^sensor\.(.*)_estado$', '\\1') | sort | list %}
+        {{ (['haze_mrtn_main'] if 'haze_mrtn_main' in todos else []) + (todos | reject('eq', 'haze_mrtn_main') | list) }}
     condition:
       - condition: template
         value_template: "{{ haze | count > 0 and haze != state_attr('input_select.kiosk_haze', 'options') }}"

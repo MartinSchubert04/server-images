@@ -485,7 +485,7 @@ button_card_templates:
   # Haze, the desktop music player (MQTT entities, one device per PC): the cover fills the
   # card and fades to dark at the bottom, where title, artist and the controls sit.
   # Which Haze it shows comes from input_select.kiosk_haze (entity prefix, e.g. haze_pc);
-  # the chip at the top right switches to the next one. Entity ids are built from it, so
+  # the three dots at the top right open its dialog (a dropdown). Entity ids are built from it, so
   # triggers_update can't list them: "all" re-renders on any change (cheap, 3 templates).
   # Folder opens HA's own dialog for the select entity. Double width, triple height.
   fusion_media:
@@ -519,13 +519,10 @@ button_card_templates:
         ]]]
       dev: |
         [[[
-          if (!entity) return '';
-          const callHass = `(this.getRootNode().host.hass||document.querySelector('home-assistant').hass)`;
           const stop = 'event.stopPropagation()';
-          const next = `${callHass}.callService('input_select','select_next',{entity_id:'input_select.kiosk_haze'})`;
-          const name = entity.state.replace(/^haze_/, '').replace(/_/g, '-');
-          return `<div class="d" onpointerup="${stop};${next}" onpointerdown="${stop}" onclick="${stop}" ` +
-            `onmousedown="${stop}" ontouchstart="${stop}"><ha-icon icon="mdi:monitor-speaker"></ha-icon>${name}</div>`;
+          const open = `this.dispatchEvent(new CustomEvent('hass-more-info',{bubbles:true,composed:true,detail:{entityId:'input_select.kiosk_haze'}}))`;
+          return `<div class="d" onpointerup="${stop};${open}" onpointerdown="${stop}" onclick="${stop}" ` +
+            `onmousedown="${stop}" ontouchstart="${stop}"><ha-icon icon="mdi:dots-vertical"></ha-icon></div>`;
         ]]]
       ctl: |
         [[[
@@ -589,16 +586,15 @@ button_card_templates:
           - pointer-events: auto
         dev:
           - position: absolute
-          - top: 10px
-          - right: 10px
+          - top: 6px
+          - right: 4px
     extra_styles: |
       .d {
-        display: flex; align-items: center; gap: 4px; padding: 4px 10px 4px 8px;
-        border-radius: 999px; background: rgba(10, 13, 16, 0.55); cursor: pointer;
-        font-size: 12px; line-height: 16px; color: rgba(255, 255, 255, 0.85);
+        width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%;
+        cursor: pointer; color: rgba(255, 255, 255, 0.85); filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
       }
-      .d ha-icon { --mdc-icon-size: 16px; }
-      .d:active { transform: scale(0.95); }
+      .d ha-icon { --mdc-icon-size: 22px; }
+      .d:active { transform: scale(0.92); }
       #bg .pic { position: absolute; inset: 0; background-size: cover; background-position: center; }
       #bg::after {
         content: ''; position: absolute; inset: 0;
