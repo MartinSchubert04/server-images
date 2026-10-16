@@ -48,6 +48,14 @@ sections:
         description: Uso de CPU, RAM y disco
         icon: hl-glances
         url: http://mrtn-server.tailbce521.ts.net:61208
+      - title: Dozzle
+        description: Logs de los contenedores
+        icon: hl-dozzle
+        url: http://mrtn-server.tailbce521.ts.net:8080
+      - title: Beszel
+        description: Métricas del server y los contenedores
+        icon: hl-beszel
+        url: http://mrtn-server.tailbce521.ts.net:8090
       - title: Kopia
         description: Backups
         icon: hl-kopia
