@@ -2,10 +2,12 @@
 # Copia lo que git no versiona (.env, bases, configs con claves) de los repos en Windows a los clones
 # de Linux. C: tiene que estar montado: sudo mount -t ntfs3 -o ro /dev/nvme0n1p3 /mnt/c
 #   sh linux/copy-untracked.sh [--sin-grabaciones]
+# Origen, destino y repos se pueden cambiar, por ejemplo para copiar desde una restauración de Kopia:
+#   WIN=/tmp/restore REPOS=docker-images sh linux/copy-untracked.sh
 set -eu
-WIN=/mnt/c/Users/tincho/Desktop/Projects
-LIN="$HOME/Projects"
-REPOS="docker-images Job-autoapply RuView consumo-pc"
+WIN="${WIN:-/mnt/c/Users/tincho/Desktop/Projects}"
+LIN="${LIN:-$HOME/Projects}"
+REPOS="${REPOS:-docker-images Job-autoapply RuView consumo-pc}"
 
 FILTRO='^$'
 [ "${1:-}" = "--sin-grabaciones" ] && FILTRO='^home-assistant/frigate/media/'
