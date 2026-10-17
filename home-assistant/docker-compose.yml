@@ -30,6 +30,9 @@ services:
       - homeassistant_data:/config
       - /etc/localtime:/etc/localtime:ro
     restart: unless-stopped
+    # Docker Desktop ya define host.docker.internal; en Linux hace falta esta línea
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8123:8123"
     deploy:
