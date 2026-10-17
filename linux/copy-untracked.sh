@@ -30,6 +30,13 @@ sudo chown -R "$(id -u):$(id -g)" "$LIN"
 # Windows deja CRLF en los archivos que no pasan por git
 find "$LIN" -name '.env' -not -path '*/node_modules/*' -exec dos2unix -q {} +
 
+# El .env de Kopia trae la ruta de Windows del repositorio (C:\Backups\kopia): en Linux no existe
+K="$LIN/docker-images/kopia/.env"
+if [ -f "$K" ] && grep -q '^BACKUP_DEST=[A-Za-z]:' "$K"; then
+  sed -i 's#^BACKUP_DEST=.*#BACKUP_DEST=/srv/backups/kopia#' "$K"
+  echo "kopia/.env: BACKUP_DEST pasado a /srv/backups/kopia"
+fi
+
 # Mosquitto corre con uid 1883 y se queja si el passwd lo puede leer cualquiera
 M="$LIN/docker-images/home-assistant/mosquitto"
 if [ -d "$M" ]; then
