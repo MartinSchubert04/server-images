@@ -388,6 +388,10 @@ Todo se commitea a `main` y no rompe Windows.
 
 ## 6. Fase 2: ensayo en una VM de Hyper-V
 
+> **Hecho el 17/10/2026, pero en WSL y no en Hyper-V** (Hyper-V no deja crear VMs en esta build de
+> Windows). Resultados, cambios obligatorios y bugs encontrados en [linux/ENSAYO.md](linux/ENSAYO.md).
+> Lo de abajo queda como referencia por si se repite en una VM.
+
 Sirve para probar la instalación, el script y la restauración de backups sin tocar el disco.
 No se prueba la GPU.
 
@@ -912,8 +916,15 @@ completa. Calcular entre 2 y 4 horas.
     sed -i 's#^BACKUP_DEST=.*#BACKUP_DEST=/srv/backups/kopia#' kopia/.env
     ```
 
-13. Aplicar los cambios que solo sirven en Linux ([3.1](#31-cambios-al-repo)): `wake_pc`, sensores de
-    Glances, `hwaccel` de Frigate, corregir la IP de la cámara si hace falta. Commitear.
+13. Aplicar los cambios que solo sirven en Linux, **antes** de levantar HA (`ssh-key-init` copia
+    `configuration.yaml` del repo en cada `up`):
+
+    ```sh
+    git apply linux/cambios-linux.patch    # sensores de Glances y wake_pc (probado en el ensayo)
+    ```
+
+    Después, a mano: `hwaccel` de Frigate y la IP de la cámara si hace falta ([3.3](#33-frigate)).
+    Commitear y pushear.
 
 14. Tailscale:
     1. En el admin de Tailscale, borrar el nodo viejo `mrtn-server` (Windows).
@@ -940,7 +951,21 @@ completa. Calcular entre 2 y 4 horas.
 
     Si `hacs-installer` falla por la red, no frena nada: HACS ya está instalado en el volumen.
 
-16. consumo-pc: si ya está portado, compilar e instalar su unidad de systemd. Si no, queda para después.
+16. consumo-pc: si ya está portado, compilar e instalar su unidad de systemd. Si no, los
+    `sensor.server_*` del kiosco y del dashboard Home quedan no disponibles hasta portarlo.
+
+16b. **Kopia: reconectarlo a su repositorio.** Su config no está en el snapshot; sin esto no hay
+    backups:
+
+    ```sh
+    docker exec kopia kopia repository connect filesystem --path=/repository       --override-hostname=mrtn-server --override-username=root
+    docker exec kopia kopia snapshot list --all      # tiene que mostrar el historial
+    ```
+
+16c. **Kiosco:** en HA → Ajustes → Entidades, buscar `host_docker_internal` y ver con qué nombres
+    quedaron el disco `/`, el pendrive y la placa de red. Actualizar `kiosk/dashboard.yaml` (hoy usa
+    `c_disk_usage`, `d_disk_usage`, `wi_fi_rx` y `wi_fi_tx`) y correr `kiosk/deploy.sh`. O renombrar
+    las entidades nuevas a los IDs viejos.
 
 17. GRUB: Linux pasa a ser el arranque por defecto.
 
