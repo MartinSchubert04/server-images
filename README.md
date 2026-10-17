@@ -55,7 +55,8 @@ server; la Pi solo hace de satélite con micrófono y parlante.
   un asistente con esos dos.
 - **Satélite:** la carpeta `satelite-pi` se levanta en la Raspberry Pi, no en el server. Con Docker
   instalado en la Pi: copiar la carpeta, pasar `.env.example` a `.env`, completar el micrófono y el
-  parlante (`arecord -L` y `aplay -L` listan los dispositivos) y `docker compose up -d`. Después,
+  parlante (`arecord -L` y `aplay -L` listan los dispositivos) y `docker compose up -d` (la primera
+  vez arma la imagen del satélite, que no tiene una publicada). Después,
   en Home Assistant, agregar la integración Wyoming con la IP de la Pi y el puerto `10700`, y
   elegirle el asistente.
 - La primera vez que levantan, los dos contenedores descargan sus modelos en sus volúmenes.

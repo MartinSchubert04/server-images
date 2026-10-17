@@ -9,7 +9,7 @@ services:
 
   satellite:
     container_name: satellite
-    image: rhasspy/wyoming-satellite:latest
+    build: .
     depends_on:
       - openwakeword
     devices:
