@@ -16,9 +16,13 @@ for p in $REPOS; do
   [ -d "$WIN/$p" ] || { echo "No está $WIN/$p, lo salteo"; continue; }
   [ -d "$LIN/$p" ] || { echo "Falta clonar $p en $LIN"; exit 1; }
   echo "==> $p"
-  git -C "$WIN/$p" ls-files --others --ignored --exclude-standard -z \
-    | grep -zv -e 'node_modules/' -e '\.exe$' -e '\.log$' -e "$FILTRO" \
+  # safe.directory: C: montado o una restauración son de root, y git se niega a leer repos ajenos
+  LISTA=$(mktemp)
+  git -c safe.directory='*' -C "$WIN/$p" ls-files --others --ignored --exclude-standard -z > "$LISTA"
+  grep -zv -e 'node_modules/' -e '\.exe$' -e '\.log$' -e "$FILTRO" "$LISTA" \
     | sudo rsync -a --from0 --files-from=- "$WIN/$p/" "$LIN/$p/"
+  echo "$(tr -cd '\0' < "$LISTA" | wc -c) archivos no versionados"
+  rm -f "$LISTA"
 done
 sudo chown -R "$(id -u):$(id -g)" "$LIN"
 
