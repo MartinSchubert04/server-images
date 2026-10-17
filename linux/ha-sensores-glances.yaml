@@ -7,8 +7,11 @@
     scan_interval: 30
     sensor:
       - name: "CPU Temperatura"
+        # Sin el sensor (por ejemplo, sin el módulo coretemp) queda no disponible en vez de dar error
+        availability: >-
+          {{ value_json | selectattr('label', 'eq', 'Package id 0') | list | count > 0 }}
         value_template: >-
-          {{ (value_json | selectattr('label', 'eq', 'Package id 0') | first).value | float(0) }}
+          {{ value_json | selectattr('label', 'eq', 'Package id 0') | map(attribute='value') | first | default(0) | float(0) }}
         unit_of_measurement: "°C"
         device_class: temperature
 

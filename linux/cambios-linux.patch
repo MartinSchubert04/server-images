@@ -1,0 +1,106 @@
+diff --git a/home-assistant/home-assistant-init/configuration.yaml b/home-assistant/home-assistant-init/configuration.yaml
+index 78c3ad2..1186129 100644
+--- a/home-assistant/home-assistant-init/configuration.yaml
++++ b/home-assistant/home-assistant-init/configuration.yaml
+@@ -24,7 +24,7 @@ sensor:
+ shell_command:
+   limpiar_snapshots: "rm -f /config/www/snapshots/captura_*.jpg"
+   apagar_pc: 'ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i /config/.ssh/id_ed25519 martin@192.168.0.10 "shutdown /s /t 0"'
+-  wake_pc: 'ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i /config/.ssh/id_ed25519 tincho@192.168.0.100 "powershell wake_on_lan.ps1"'
++  wake_pc: 'ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i /config/.ssh/id_ed25519 tincho@192.168.0.100 "sh /home/tincho/Projects/docker-images/home-assistant/scripts/wake_on_lan.sh"'
+ 
+ http:
+   use_x_forwarded_for: true
+@@ -39,65 +39,61 @@ rest:
+         value_template: "{{ value_json.gpu_usages['NVIDIA GeForce RTX 2060 SUPER'].gpu | replace('%','') }}"
+         unit_of_measurement: "%"
+ 
+-  - resource: http://host.docker.internal:8085/data.json
++  - resource: http://host.docker.internal:61208/api/4/sensors
+     scan_interval: 30
+     sensor:
+       - name: "CPU Temperatura"
++        # Sin el sensor (por ejemplo, sin el módulo coretemp) queda no disponible en vez de dar error
++        availability: >-
++          {{ value_json | selectattr('label', 'eq', 'Package id 0') | list | count > 0 }}
+         value_template: >-
+-          {{ value_json['Children'][0]['Children'][1]['Children'][3]['Children'][8]['Value']
+-             | replace(',', '.') | replace(' °C', '') | float(0) }}
++          {{ value_json | selectattr('label', 'eq', 'Package id 0') | map(attribute='value') | first | default(0) | float(0) }}
+         unit_of_measurement: "°C"
+         device_class: temperature
+ 
++  - resource: http://host.docker.internal:61208/api/4/cpu
++    scan_interval: 30
++    sensor:
+       - name: "CPU Uso Porcentaje"
+-        value_template: >-
+-          {{ value_json['Children'][0]['Children'][1]['Children'][4]['Children'][0]['Value']
+-             | replace(',', '.') | replace(' %', '') | float(0) }}
++        value_template: "{{ value_json.total | float(0) }}"
+         unit_of_measurement: "%"
+ 
++  - resource: http://host.docker.internal:61208/api/4/gpu
++    scan_interval: 30
++    sensor:
+       - name: "GPU Temperatura"
+-        value_template: >-
+-          {{ value_json['Children'][0]['Children'][6]['Children'][3]['Children'][0]['Value']
+-             | replace(',', '.') | replace(' °C', '') | float(0) }}
++        value_template: "{{ value_json[0].temperature | float(0) }}"
+         unit_of_measurement: "°C"
+         device_class: temperature
+ 
++  - resource: http://host.docker.internal:61208/api/4/fs
++    scan_interval: 60
++    sensor:
+       - name: "Disco Espacio Libre"
+         value_template: >-
+-          {{ value_json['Children'][0]['Children'][7]['Children'][4]['Children'][2]['Value']
+-             | replace(',', '.') | replace(' GB', '') | float(0) }}
++          {{ ((value_json | selectattr('mnt_point', 'eq', '/') | first).free / 1024**3) | round(1) }}
+         unit_of_measurement: "GB"
+         device_class: data_size
+-
+       - name: "Disco Espacio Total"
+         value_template: >-
+-          {{ value_json['Children'][0]['Children'][7]['Children'][4]['Children'][3]['Value']
+-             | replace(',', '.') | replace(' GB', '') | float(0) }}
++          {{ ((value_json | selectattr('mnt_point', 'eq', '/') | first).size / 1024**3) | round(1) }}
+         unit_of_measurement: "GB"
+         device_class: data_size
+-
+       - name: "Disco Uso Porcentaje"
+-        value_template: >-
+-          {{ value_json['Children'][0]['Children'][7]['Children'][1]['Children'][0]['Value']
+-             | replace(',', '.') | replace(' %', '') | float(0) }}
++        value_template: "{{ (value_json | selectattr('mnt_point', 'eq', '/') | first).percent }}"
+         unit_of_measurement: "%"
+ 
++  - resource: http://host.docker.internal:61208/api/4/mem
++    scan_interval: 30
++    sensor:
+       - name: "RAM Uso Porcentaje"
+-        value_template: >-
+-          {{ value_json['Children'][0]['Children'][4]['Children'][0]['Children'][0]['Value']
+-             | replace(',', '.') | replace(' %', '') | float(0) }}
++        value_template: "{{ value_json.percent }}"
+         unit_of_measurement: "%"
+-
+       - name: "RAM Usada"
+-        value_template: >-
+-          {{ value_json['Children'][0]['Children'][4]['Children'][1]['Children'][0]['Value']
+-             | replace(',', '.') | replace(' GB', '') | float(0) }}
++        value_template: "{{ (value_json.used / 1024**3) | round(2) }}"
+         unit_of_measurement: "GB"
+         device_class: data_size
+-
+       - name: "RAM Disponible"
+-        value_template: >-
+-          {{ value_json['Children'][0]['Children'][4]['Children'][1]['Children'][1]['Value']
+-             | replace(',', '.') | replace(' GB', '') | float(0) }}
++        value_template: "{{ (value_json.available / 1024**3) | round(2) }}"
+         unit_of_measurement: "GB"
+-        device_class: data_size
+\ No newline at end of file
++        device_class: data_size
