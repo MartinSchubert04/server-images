@@ -100,7 +100,13 @@ else
 fi
 
 paso "Glances"
-sudo -u "$USUARIO" -H pipx install --force "glances[web,gpu]"
+# pypi a veces tarda: hasta tres intentos con timeout largo
+n=0
+until sudo -u "$USUARIO" -H env PIP_DEFAULT_TIMEOUT=60 pipx install --force "glances[web,gpu]"; do
+  n=$((n + 1))
+  [ "$n" -ge 3 ] && { echo "No se pudo instalar Glances"; exit 1; }
+  echo "Reintento $n de Glances..."; sleep 10
+done
 install -m 0644 "$REPO/linux/systemd/glances.service" /etc/systemd/system/
 
 paso "Espejo de Kopia al pendrive"
