@@ -1,0 +1,31 @@
+# Corre en la Raspberry Pi, no en el server: escucha la palabra de activación y le pasa el audio a
+# Home Assistant, que lo manda a Whisper y Piper en el server.
+services:
+  openwakeword:
+    container_name: openwakeword
+    image: rhasspy/wyoming-openwakeword:latest
+    command: --preload-model ${WAKE_WORD}
+    restart: unless-stopped
+
+  satellite:
+    container_name: satellite
+    image: rhasspy/wyoming-satellite:latest
+    depends_on:
+      - openwakeword
+    devices:
+      - /dev/snd:/dev/snd
+    group_add:
+      - audio
+    ports:
+      # Home Assistant se conecta a este puerto
+      - "10700:10700"
+    command: >
+      --name "${SATELLITE_NAME}"
+      --uri tcp://0.0.0.0:10700
+      --mic-command "arecord -D ${MIC_DEVICE} -r 16000 -c 1 -f S16_LE -t raw"
+      --snd-command "aplay -D ${SND_DEVICE} -r 22050 -c 1 -f S16_LE -t raw"
+      --wake-uri tcp://openwakeword:10400
+      --wake-word-name ${WAKE_WORD}
+      --mic-auto-gain 5
+      --mic-noise-suppression 2
+    restart: unless-stopped

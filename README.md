@@ -53,8 +53,11 @@ server; la Pi solo hace de satélite con micrófono y parlante.
 - **Integración:** en Home Assistant, agregar dos veces la integración Wyoming: host `whisper`,
   puerto `10300`, y host `piper`, puerto `10200`. Después, en Settings > Voice assistants, armar
   un asistente con esos dos.
-- **Satélite:** en la Pi, `wyoming-satellite` con `openWakeWord`, apuntando a la IP del server.
-  Home Assistant lo detecta solo y se le asigna el asistente.
+- **Satélite:** la carpeta `satelite-pi` se levanta en la Raspberry Pi, no en el server. Con Docker
+  instalado en la Pi: copiar la carpeta, pasar `.env.example` a `.env`, completar el micrófono y el
+  parlante (`arecord -L` y `aplay -L` listan los dispositivos) y `docker compose up -d`. Después,
+  en Home Assistant, agregar la integración Wyoming con la IP de la Pi y el puerto `10700`, y
+  elegirle el asistente.
 - La primera vez que levantan, los dos contenedores descargan sus modelos en sus volúmenes.
   El modelo y la voz se cambian en `WHISPER_MODEL` y `PIPER_VOICE` del compose.
 
