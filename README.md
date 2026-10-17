@@ -11,6 +11,8 @@ levanta con `docker compose up -d` desde adentro.
 | `home-assistant` | ESPHome | 6052 | Firmware de los ESP |
 | `home-assistant` | Mosquitto | 1883 | Broker MQTT |
 | `home-assistant` | Frigate | 5000, 8554, 8555 | Cámaras y detección (usa la GPU) |
+| `home-assistant` | Whisper | 10300 | Voz a texto para Assist (usa la GPU) |
+| `home-assistant` | Piper | 10200 | Texto a voz para Assist |
 | `adguard` | AdGuard Home | 53, 3000 | DNS de la red y bloqueo de ads |
 | `n8n` | n8n | 5678 | Workflows |
 | `waha` | WAHA | 3001 | API de WhatsApp |
@@ -42,6 +44,19 @@ El dashboard Home tiene las pestañas Weather y Traffic, y un resumen de ambas e
 - **Tarjetas:** `weather-forecast-card.js` y `windy-card.js` van en `/config/www/weather-cards`;
   los links de descarga están en `athanor/build_home_dashboard.py`.
 - `athanor/build_home_dashboard.py` se corre con el contenedor de Home Assistant detenido.
+
+## Home Assistant: voz
+
+Whisper (`medium-int8`, en castellano, sobre la GPU) y Piper (voz `es_AR-daniela-high`) corren en el
+server; la Pi solo hace de satélite con micrófono y parlante.
+
+- **Integración:** en Home Assistant, agregar dos veces la integración Wyoming: host `whisper`,
+  puerto `10300`, y host `piper`, puerto `10200`. Después, en Settings > Voice assistants, armar
+  un asistente con esos dos.
+- **Satélite:** en la Pi, `wyoming-satellite` con `openWakeWord`, apuntando a la IP del server.
+  Home Assistant lo detecta solo y se le asigna el asistente.
+- La primera vez que levantan, los dos contenedores descargan sus modelos en sus volúmenes.
+  El modelo y la voz se cambian en `WHISPER_MODEL` y `PIPER_VOICE` del compose.
 
 ## Monitoreo
 

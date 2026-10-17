@@ -84,6 +84,52 @@ services:
               count: 1
               capabilities: [gpu]
 
+  # ----- Voz (Assist): Home Assistant los agrega con la integración Wyoming
+  whisper:
+    container_name: whisper
+    image: lscr.io/linuxserver/faster-whisper:gpu
+    networks:
+      - home
+    environment:
+      TZ: ${TZ}
+      WHISPER_MODEL: medium-int8
+      WHISPER_LANG: es
+      WHISPER_BEAM: 5
+    volumes:
+      - whisper_data:/config
+    ports:
+      - "10300:10300"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 3G
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  piper:
+    container_name: piper
+    image: lscr.io/linuxserver/piper:latest
+    networks:
+      - home
+    environment:
+      TZ: ${TZ}
+      PIPER_VOICE: es_AR-daniela-high
+    volumes:
+      - piper_data:/config
+    ports:
+      - "10200:10200"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 1G
+
   # ----- Home assistant dependency
   hacs-installer:
     container_name: hacs-installer
@@ -122,3 +168,5 @@ networks:
 volumes:
   esphome_data:
   homeassistant_data:
+  whisper_data:
+  piper_data:
