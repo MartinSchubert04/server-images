@@ -1,0 +1,8 @@
+[Unit]
+Description=Espejo del repositorio de Kopia al pendrive
+RequiresMountsFor=/srv/backups/kopia
+
+[Service]
+Type=oneshot
+# Corre como root: Kopia escribe el repositorio como root dentro del contenedor
+ExecStart=/home/tincho/Projects/docker-images/kopia/mirror-backup.sh

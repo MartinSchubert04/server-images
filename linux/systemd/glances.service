@@ -1,0 +1,12 @@
+[Unit]
+Description=Glances (API y web en el puerto 61208; Home Assistant lee los sensores de acá)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=tincho
+ExecStart=/home/tincho/.local/bin/glances -w --disable-plugin processlist,programlist,vms
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

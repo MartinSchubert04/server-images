@@ -1,0 +1,9 @@
+[Unit]
+Description=Espejo de Kopia al pendrive a las 05:00 (el snapshot de Kopia es a las 04:00)
+
+[Timer]
+OnCalendar=*-*-* 05:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

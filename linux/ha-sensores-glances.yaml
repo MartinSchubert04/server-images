@@ -1,0 +1,60 @@
+# Reemplazo de los sensores de LibreHardwareMonitor en home-assistant-init/configuration.yaml.
+# Se pega en lugar del bloque "- resource: http://host.docker.internal:8085/data.json" (dentro de
+# "rest:") el día del cambio. Los nombres son los mismos, así las entidades y los dashboards no cambian.
+# Antes de pegarlo, confirmar el label de la CPU con: curl -s localhost:61208/api/4/sensors | jq
+
+  - resource: http://host.docker.internal:61208/api/4/sensors
+    scan_interval: 30
+    sensor:
+      - name: "CPU Temperatura"
+        value_template: >-
+          {{ (value_json | selectattr('label', 'eq', 'Package id 0') | first).value | float(0) }}
+        unit_of_measurement: "°C"
+        device_class: temperature
+
+  - resource: http://host.docker.internal:61208/api/4/cpu
+    scan_interval: 30
+    sensor:
+      - name: "CPU Uso Porcentaje"
+        value_template: "{{ value_json.total | float(0) }}"
+        unit_of_measurement: "%"
+
+  - resource: http://host.docker.internal:61208/api/4/gpu
+    scan_interval: 30
+    sensor:
+      - name: "GPU Temperatura"
+        value_template: "{{ value_json[0].temperature | float(0) }}"
+        unit_of_measurement: "°C"
+        device_class: temperature
+
+  - resource: http://host.docker.internal:61208/api/4/fs
+    scan_interval: 60
+    sensor:
+      - name: "Disco Espacio Libre"
+        value_template: >-
+          {{ ((value_json | selectattr('mnt_point', 'eq', '/') | first).free / 1024**3) | round(1) }}
+        unit_of_measurement: "GB"
+        device_class: data_size
+      - name: "Disco Espacio Total"
+        value_template: >-
+          {{ ((value_json | selectattr('mnt_point', 'eq', '/') | first).size / 1024**3) | round(1) }}
+        unit_of_measurement: "GB"
+        device_class: data_size
+      - name: "Disco Uso Porcentaje"
+        value_template: "{{ (value_json | selectattr('mnt_point', 'eq', '/') | first).percent }}"
+        unit_of_measurement: "%"
+
+  - resource: http://host.docker.internal:61208/api/4/mem
+    scan_interval: 30
+    sensor:
+      - name: "RAM Uso Porcentaje"
+        value_template: "{{ value_json.percent }}"
+        unit_of_measurement: "%"
+      - name: "RAM Usada"
+        value_template: "{{ (value_json.used / 1024**3) | round(2) }}"
+        unit_of_measurement: "GB"
+        device_class: data_size
+      - name: "RAM Disponible"
+        value_template: "{{ (value_json.available / 1024**3) | round(2) }}"
+        unit_of_measurement: "GB"
+        device_class: data_size

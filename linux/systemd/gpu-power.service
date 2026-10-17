@@ -1,0 +1,12 @@
+[Unit]
+Description=Límite de potencia de la GPU (lo que hacía MSI Afterburner)
+After=nvidia-persistenced.service
+Wants=nvidia-persistenced.service
+
+[Service]
+Type=oneshot
+# La 2060 Super viene con 175 W. Ajustar al valor del perfil de Afterburner
+ExecStart=/usr/bin/nvidia-smi -pl 150
+
+[Install]
+WantedBy=multi-user.target
