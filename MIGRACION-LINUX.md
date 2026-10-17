@@ -522,7 +522,16 @@ sudo timedatectl set-local-rtc 1
 
 ## 8. Fase 4: configurar el sistema
 
-Todo esto va en `linux/bootstrap.sh`. Acá está desglosado.
+Todo esto va en `linux/bootstrap.sh`, que ya se probó en limpio (ver [linux/ENSAYO.md](linux/ENSAYO.md)).
+Debian netinst no trae git, así que primero:
+
+```sh
+sudo apt install -y git
+mkdir -p ~/Projects && cd ~/Projects && git clone <url>/docker-images.git
+cd docker-images && sudo sh linux/bootstrap.sh
+```
+
+Acá está desglosado lo que hace.
 
 ### 8.1 Base
 
@@ -807,7 +816,12 @@ completa. Calcular entre 2 y 4 horas.
    }
    ```
 
-3. Exportar los volúmenes (`.\linux\export-volumes.ps1`, que además avisa si algún contenedor sigue usándolos):
+3. **Camino principal:** con todo parado, sacar un snapshot manual de Kopia (`docker start kopia`,
+   snapshot desde la UI o `docker exec kopia kopia snapshot create /data`, y `docker stop kopia`).
+   En Linux se restaura con `linux/restaurar-kopia.sh` (paso 11), que ya se probó en el ensayo.
+
+   **Plan B**, además o si Kopia falla: exportar los volúmenes (`.\linux\export-volumes.ps1`, que
+   además avisa si algún contenedor sigue usándolos):
 
    ```powershell
    $out = 'C:\migracion\volumes'
@@ -865,7 +879,18 @@ completa. Calcular entre 2 y 4 horas.
     sudo chmod 0700 home-assistant/mosquitto/config/passwd
     ```
 
-11. Importar los volúmenes (`sh linux/import-volumes.sh`):
+11. Recuperar los volúmenes. **Camino principal**, con el repositorio de Kopia ya copiado (paso 12;
+    hacerlo antes que este):
+
+    ```sh
+    sh linux/restaurar-kopia.sh                       # último snapshot
+    WIN=/srv/restore REPOS=docker-images sh linux/copy-untracked.sh
+    ```
+
+    El snapshot no tiene lo de Job-autoapply (`config/`, `data/`), consumo-pc ni RuView: eso sale
+    igual de C: con `copy-untracked.sh` (paso 9).
+
+    **Plan B**, desde los `.tar.gz` (`sh linux/import-volumes.sh`):
 
     ```sh
     IN=/mnt/c/migracion/volumes
