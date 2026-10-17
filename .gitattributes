@@ -1,0 +1,4 @@
+# Los scripts de shell se montan en contenedores o corren en Linux: siempre con LF, también en Windows
+*.sh text eol=lf
+*.service text eol=lf
+*.timer text eol=lf
