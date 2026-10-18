@@ -3,7 +3,7 @@
 #   sh deploy.sh        -> kiosco (dashboard.yaml -> dashboard-kiosk) y recarga TouchKio
 #   sh deploy.sh home   -> Home de escritorio (home.yaml -> dashboard-home), con las
 #                          plantillas del kiosco de base
-# Sin token deja /local/kiosk/kd.json para guardarlo a mano (ver HANDOFF.md, "Deploy")
+# Sin token deja /local/kiosk/kd.json para guardarlo a mano
 # y hay que borrarlo despues. Correr en mrtn-server.
 set -e
 cd "$(dirname "$0")"

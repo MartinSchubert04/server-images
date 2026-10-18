@@ -1,6 +1,6 @@
 #!/bin/sh
 # Deja un Debian 13 recién instalado listo para levantar los stacks de este repo.
-# Ver MIGRACION-LINUX.md, fase 4. Se puede correr más de una vez.
+# Se puede correr más de una vez.
 #
 #   sudo sh linux/bootstrap.sh            # server real, con la GPU
 #   sudo sh linux/bootstrap.sh --sin-gpu  # VM de prueba: sin drivers de NVIDIA

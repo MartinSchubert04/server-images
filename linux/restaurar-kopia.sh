@@ -1,6 +1,6 @@
 #!/bin/sh
 # Restaura un snapshot de Kopia en los volúmenes de Docker y la carpeta del repo en DEST/docker-images.
-# Es el camino principal del día del cambio (ver MIGRACION-LINUX.md, fase 6); export-volumes.ps1
+# Es el camino principal del día del cambio; export-volumes.ps1
 # queda como plan B.
 #
 #   sh linux/restaurar-kopia.sh                 # el último snapshot

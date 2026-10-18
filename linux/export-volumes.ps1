@@ -1,5 +1,5 @@
 # Exporta los volúmenes de Docker Desktop a .tar.gz, para importarlos en Linux con import-volumes.sh.
-# Antes, parar los contenedores que los usan (ver MIGRACION-LINUX.md, fase 6).
+# Antes, parar los contenedores que los usan.
 #
 #   .\linux\export-volumes.ps1                      # los volúmenes de siempre
 #   .\linux\export-volumes.ps1 -Extra job-autoapply_ollama
