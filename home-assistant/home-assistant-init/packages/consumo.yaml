@@ -323,7 +323,8 @@ rest:
         state_class: measurement
         icon: mdi:harddisk
         value_template: >-
-          {% set d = value_json.discos | selectattr('letra', 'eq', 'C') | first %}
+          {# El disco del sistema: "C" en Windows, "/" en Linux #}
+          {% set d = value_json.discos | selectattr('letra', 'in', ['C', '/']) | first %}
           {{ ((d.total - d.libre) / d.total * 100) | round(1) }}
       # Los procesos con más uso van como atributo; el estado es el primero de la lista
       - name: "Server procesos"

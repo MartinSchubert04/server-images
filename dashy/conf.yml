@@ -64,7 +64,7 @@ sections:
       - title: Consumo PC
         description: Solo por Tailscale
         icon: fas fa-bolt
-        url: https://consumo.tailbce521.ts.net
+        url: http://mrtn-server.tailbce521.ts.net:8787
 
   - name: Automatización
     icon: fas fa-robot

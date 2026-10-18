@@ -118,3 +118,21 @@ Frigate, Whisper, ollama, GRUB y dual boot, la placa de red, los sensores de la 
   volúmenes restaurados. Es solo un aviso, funcionan igual.
 - **Sugerencia:** mover `hacs-installer` a un perfil de Compose (`profiles: [init]`), para que
   levantar HA no dependa de internet ni reinstale HACS en cada `up`.
+
+## Día del cambio (18/10/2026)
+
+Hecho en el server real, con los datos del snapshot de Kopia de las 10:24. Lo que no salió como en el
+ensayo:
+
+| Problema | Arreglo |
+|---|---|
+| El instalador dejó los repos en `/etc/apt/sources.list` (formato viejo) y `bootstrap.sh` solo agregaba `contrib non-free` en `debian.sources`: no encontraba los paquetes de NVIDIA | `bootstrap.sh` maneja los dos formatos |
+| Con contraseña de root en el instalador, el usuario no queda en `sudo` | `su -c` para instalar `sudo` y sumarlo al grupo. `su -c` sin guion no tiene `/usr/sbin` en el PATH |
+| Wi-Fi USB (RTL8811AU) sin driver en el kernel 6.12 | Driver DKMS de [morrownr/8821au](https://github.com/morrownr/8821au-20210708), con `rtw_power_mgnt=0`. La reserva `192.168.0.100` sigue en la MAC del Wi-Fi |
+| Ventiladores que aceleraban y frenaban todo el tiempo con la curva de la BIOS | `it87-dkms` y CoolerControl del repo de CoolerControl (`ignore_resource_conflict=1`). UI en `127.0.0.1:11987`, por túnel SSH |
+| HA respondía 400 por `tailscale serve`: la red `home` pasó de 172.21 a 172.18 | `trusted_proxies: 172.16.0.0/12`. Ojo: HA ya migró la config `http` del YAML a `.storage/http`; hubo que corregirla también ahí |
+| Glances 4.5 + integración de HA: `KeyError: 'time_since_update'` en el primer arranque | Recargar la integración una vez que Glances ya tiene datos |
+| Tuya pide reautenticar | El token se renovó en Windows después del snapshot |
+| `svc:consumo` de Tailscale exige un nodo con tag | No se usa: Dashy apunta a `mrtn-server.tailbce521.ts.net:8787` |
+| RuView en Windows no era Docker sino `sensing-server.exe` con `netsh` | Queda pendiente portarlo |
+| consumo-pc | Portado a Linux (sysfs, `/proc`, NVML por `purego`, SQLite en Go puro) y corriendo con systemd |

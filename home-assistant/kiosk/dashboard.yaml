@@ -1405,13 +1405,13 @@ views:
                 icon: mdi:timer-outline
               - type: custom:button-card
                 template: fusion_tile
-                entity: sensor.host_docker_internal_c_disk_usage
-                name: Disk C
+                entity: sensor.host_docker_internal_disk_usage
+                name: Disco
                 icon: mdi:harddisk
               - type: custom:button-card
                 template: fusion_tile
-                entity: sensor.host_docker_internal_d_disk_usage
-                name: Disk D
+                entity: sensor.host_docker_internal_mnt_pendrive_disk_usage
+                name: Pendrive
                 icon: mdi:harddisk
               - type: custom:button-card
                 template: fusion_tile
@@ -1421,12 +1421,12 @@ views:
                 hold_action: { action: none }
               - type: custom:button-card
                 template: fusion_tile
-                entity: sensor.host_docker_internal_wi_fi_rx
+                entity: sensor.host_docker_internal_wlxdc6279d174da_rx
                 name: Wi-Fi down
                 icon: mdi:download
               - type: custom:button-card
                 template: fusion_tile
-                entity: sensor.host_docker_internal_wi_fi_tx
+                entity: sensor.host_docker_internal_wlxdc6279d174da_tx
                 name: Wi-Fi up
                 icon: mdi:upload
           # The Docker VM Home Assistant runs in (System Monitor)
@@ -1471,9 +1471,9 @@ views:
                 title: Wi-Fi (24 h)
                 hours_to_show: 24
                 entities:
-                  - entity: sensor.host_docker_internal_wi_fi_rx
+                  - entity: sensor.host_docker_internal_wlxdc6279d174da_rx
                     name: Down
-                  - entity: sensor.host_docker_internal_wi_fi_tx
+                  - entity: sensor.host_docker_internal_wlxdc6279d174da_tx
                     name: Up
               - type: history-graph
                 title: Power (24 h)
@@ -1482,8 +1482,8 @@ views:
                   - entity: sensor.bedroom_plug_server_power
                     name: Server
               - type: gauge
-                entity: sensor.host_docker_internal_c_disk_usage
-                name: Disk C
+                entity: sensor.host_docker_internal_disk_usage
+                name: Disco
                 min: 0
                 max: 100
                 severity:
@@ -1491,8 +1491,8 @@ views:
                   yellow: 75
                   red: 90
               - type: gauge
-                entity: sensor.host_docker_internal_d_disk_usage
-                name: Disk D
+                entity: sensor.host_docker_internal_mnt_pendrive_disk_usage
+                name: Pendrive
                 min: 0
                 max: 100
                 severity:
