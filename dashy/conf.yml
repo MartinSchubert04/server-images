@@ -31,6 +31,7 @@ sections:
         description: Cámaras y detección
         icon: hl-frigate
         url: http://mrtn-server.tailbce521.ts.net:5000
+        statusCheck: false   # apagado por ahora (perfil "frigate" en home-assistant)
       - title: RuView
         description: Presencia por WiFi · Solo por Tailscale
         icon: fas fa-wifi
@@ -77,6 +78,7 @@ sections:
         description: API de WhatsApp
         icon: hl-whatsapp
         url: http://mrtn-server.tailbce521.ts.net:3001/dashboard
+        statusCheckAcceptCodes: "401"
       - title: Job Autoapply
         description: Solo por Tailscale
         icon: fas fa-briefcase

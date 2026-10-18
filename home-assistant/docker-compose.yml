@@ -60,6 +60,8 @@ services:
 
   frigate:
     container_name: frigate
+    # Apagado por ahora: no arranca con "docker compose up". Para usarlo: docker compose --profile frigate up -d
+    profiles: [frigate]
     image: ghcr.io/blakeblackshear/frigate:stable-tensorrt
     networks:
       - home

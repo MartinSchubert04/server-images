@@ -6,6 +6,11 @@ services:
       - ./conf.yml:/app/user-data/conf.yml
     ports:
       - "4000:8080"
+    # Los chequeos de estado salen de este contenedor: el nombre de Tailscale apunta al server por
+    # la red de Docker, así llegan también a lo que solo escucha en 127.0.0.1 + tailscale serve
+    # (consumo-pc y Job-autoapply escuchan además en 172.17.0.1)
+    extra_hosts:
+      - "mrtn-server.tailbce521.ts.net:host-gateway"
     environment:
       - NODE_ENV=production
     restart: unless-stopped
