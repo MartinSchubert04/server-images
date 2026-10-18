@@ -118,6 +118,10 @@ button_card_templates:
       # only reacts to drags, so a plain tap did nothing. Tap = jump to that
       # point, drag = live preview, release = send. A vertical swipe makes the
       # browser scroll (touch-action: pan-y) and fires pointercancel -> undo.
+      # The preview never writes into #state: button-card renders it with Lit and
+      # overwriting its text breaks Lit (the card stops updating). The % goes in a
+      # data-pv attribute shown by CSS, and 5 s after release the tile is repainted
+      # from the real state in HA.
       slider: |
         [[[
           const calc = `const r=this.getBoundingClientRect();` +
@@ -125,17 +129,23 @@ button_card_templates:
           const paint = `const root=this.getRootNode();const c=root.querySelector('ha-card');` +
             `const at='calc(61px + (100% - 61px) * '+v+' / 100)';` +
             `c.style.background='linear-gradient(90deg, rgba(255,255,255,0.22) '+at+', rgba(0,0,0,0.15) '+at+')';` +
-            `const s=root.querySelector('#state');if(s)s.textContent=v+' %';`;
+            `const s=root.querySelector('#state');if(s)s.setAttribute('data-pv',v+' %');`;
           const send = `const h=this.getRootNode().host;` +
             `(h.hass||document.querySelector('home-assistant').hass).callService('light','turn_on',` +
             `{entity_id:'${entity.entity_id}',brightness_pct:v});`;
-          const down = `this._d=1;const c0=this.getRootNode().querySelector('ha-card');` +
-            `this._bg=c0.style.background;const t0=this.getRootNode().querySelector('#state');this._st=t0?t0.textContent:'';` +
+          const sync = `const root=tr.getRootNode();const s=root.querySelector('#state');if(s)s.removeAttribute('data-pv');` +
+            `const st=(root.host.hass||document.querySelector('home-assistant').hass).states['${entity.entity_id}'];` +
+            `const p=st&&st.state==='on'?Math.round((st.attributes.brightness||0)/2.55):0;` +
+            `const at='calc(61px + (100% - 61px) * '+p+' / 100)';` +
+            `root.querySelector('ha-card').style.background='linear-gradient(90deg, rgba(255,255,255,0.22) '+at+', rgba(0,0,0,0.15) '+at+')';`;
+          const down = `this._d=1;clearTimeout(this._t);const c0=this.getRootNode().querySelector('ha-card');` +
+            `this._bg=c0.style.background;` +
             `try{this.setPointerCapture(event.pointerId)}catch(e){}` + calc + paint;
           const move = `if(!this._d)return;` + calc + paint;
-          const up = `if(!this._d)return;this._d=0;event.stopPropagation();` + calc + paint + send;
+          const up = `if(!this._d)return;this._d=0;event.stopPropagation();` + calc + paint + send +
+            `const tr=this;this._t=setTimeout(()=>{` + sync + `},5000);`;
           const cancel = `if(!this._d)return;this._d=0;const c=this.getRootNode().querySelector('ha-card');` +
-            `c.style.background=this._bg;const s=this.getRootNode().querySelector('#state');if(s)s.textContent=this._st;`;
+            `c.style.background=this._bg;const s=this.getRootNode().querySelector('#state');if(s)s.removeAttribute('data-pv');`;
           // Keep every event inside the track, or the card's own tap_action
           // (toggle, on Lights) would fire too.
           const stop = 'event.stopPropagation()';
@@ -178,6 +188,8 @@ button_card_templates:
           state:
             - color: rgba(255, 255, 255, 0.7)
     extra_styles: |
+      #state[data-pv] { position: relative; visibility: hidden; }
+      #state[data-pv]::after { content: attr(data-pv); visibility: visible; position: absolute; inset: 0; }
       .track {
         width: 100%;
         height: 100%;
