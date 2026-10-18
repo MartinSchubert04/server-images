@@ -942,7 +942,7 @@ views:
                     cards:
                       - type: custom:button-card
                         template: fusion_slider
-                        entity: light.cla60_smart_wifi
+                        entity: light.room
                         name: Lights
                         view_layout:
                           grid-column: span 2
