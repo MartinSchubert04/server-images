@@ -28,6 +28,11 @@ if [ -f /etc/apt/sources.list.d/debian.sources ]; then
   sed -i 's/^Components: .*/Components: main contrib non-free non-free-firmware/' \
     /etc/apt/sources.list.d/debian.sources
 fi
+# El instalador a veces deja el formato viejo (sources.list) en vez de debian.sources
+if [ -f /etc/apt/sources.list ]; then
+  sed -i -E '/^deb(-src)? .*debian/ s/ main( .*)?$/ main contrib non-free non-free-firmware/' \
+    /etc/apt/sources.list
+fi
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get full-upgrade -y
 
