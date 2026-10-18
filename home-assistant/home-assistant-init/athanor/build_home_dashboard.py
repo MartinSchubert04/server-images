@@ -1,6 +1,6 @@
 """Builds the dashboards that are generated rather than drawn by hand:
 
-- "Home": the general overviews as tabs (Overview, Weather, Traffic, Network, Lights, Energy, Security).
+- (No longer) "Home": now built from kiosk/home.yaml; its old views are still below for reference.
 - One dashboard per sector (Bedroom, Living, Kitchen), filled by Home Assistant from the area.
 
 Dashboards made in the UI are left untouched. Home Assistant keeps storage dashboards in memory, so
@@ -329,8 +329,9 @@ views += [
     {"title": "Security", "path": "security", "strategy": {"type": "security"}},
 ]
 
-generated = [entry("dashboard_home", "Home", "mdi:home")]
-write("dashboard_home", {"views": views})
+# Home (dashboard_home) is no longer written here: it's built from kiosk/home.yaml with the kiosk's
+# style (sh kiosk/deploy.sh home). The views above are kept only as the old reference.
+generated = []
 
 # ----- Sectors: one dashboard each in the sidebar, filled from the area's devices
 for area, title, icon in [("bedroom", "Bedroom", "mdi:bed"), ("living_room", "Living", "mdi:sofa"), ("kitchen", "Kitchen", "mdi:silverware-fork-knife")]:

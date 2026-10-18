@@ -105,6 +105,9 @@ button_card_templates:
   # Double width for touch; add `view_layout: {grid-column: span 2}` where used.
   fusion_slider:
     template: fusion_tile
+    # Width of the icon column (61px on the kiosk; templates with a bigger tile change it).
+    variables:
+      iw: 61
     # Tap the icon to toggle; drag over the rest of the tile to set brightness.
     tap_action:
       action: toggle
@@ -127,7 +130,7 @@ button_card_templates:
           const calc = `const r=this.getBoundingClientRect();` +
             `const v=Math.max(5,Math.min(100,Math.round((event.clientX-r.left)/r.width*100)));`;
           const paint = `const root=this.getRootNode();const c=root.querySelector('ha-card');` +
-            `const at='calc(61px + (100% - 61px) * '+v+' / 100)';` +
+            `const at='calc(${variables.iw}px + (100% - ${variables.iw}px) * '+v+' / 100)';` +
             `c.style.background='linear-gradient(90deg, rgba(255,255,255,0.22) '+at+', rgba(0,0,0,0.15) '+at+')';` +
             `const s=root.querySelector('#state');if(s)s.setAttribute('data-pv',v+' %');`;
           const send = `const h=this.getRootNode().host;` +
@@ -136,7 +139,7 @@ button_card_templates:
           const sync = `const root=tr.getRootNode();const s=root.querySelector('#state');if(s)s.removeAttribute('data-pv');` +
             `const st=(root.host.hass||document.querySelector('home-assistant').hass).states['${entity.entity_id}'];` +
             `const p=st&&st.state==='on'?Math.round((st.attributes.brightness||0)/2.55):0;` +
-            `const at='calc(61px + (100% - 61px) * '+p+' / 100)';` +
+            `const at='calc(${variables.iw}px + (100% - ${variables.iw}px) * '+p+' / 100)';` +
             `root.querySelector('ha-card').style.background='linear-gradient(90deg, rgba(255,255,255,0.22) '+at+', rgba(0,0,0,0.15) '+at+')';`;
           const down = `this._d=1;clearTimeout(this._t);const c0=this.getRootNode().querySelector('ha-card');` +
             `this._bg=c0.style.background;` +
@@ -159,7 +162,7 @@ button_card_templates:
         - background: |
             [[[
               const pct = entity && entity.state === 'on' ? Math.round((entity.attributes.brightness || 0) / 2.55) : 0;
-              const at = `calc(61px + (100% - 61px) * ${pct} / 100)`;
+              const at = `calc(${variables.iw}px + (100% - ${variables.iw}px) * ${pct} / 100)`;
               return `linear-gradient(90deg, rgba(255, 255, 255, 0.22) ${at}, rgba(0, 0, 0, 0.15) ${at})`;
             ]]]
       img_cell:
@@ -169,7 +172,7 @@ button_card_templates:
           - position: absolute
           - top: 0
           - bottom: 0
-          - left: 61px
+          - left: '[[[ return `${variables.iw}px`; ]]]'
           - right: 0
           - pointer-events: auto
     state:
@@ -180,7 +183,7 @@ button_card_templates:
             - background: |
                 [[[
                   const pct = Math.round((entity.attributes.brightness || 0) / 2.55);
-                  const at = `calc(61px + (100% - 61px) * ${pct} / 100)`;
+                  const at = `calc(${variables.iw}px + (100% - ${variables.iw}px) * ${pct} / 100)`;
                   return `linear-gradient(90deg, rgba(255, 255, 255, 0.22) ${at}, rgba(0, 0, 0, 0.15) ${at})`;
                 ]]]
           name:
@@ -500,7 +503,8 @@ button_card_templates:
   # the three dots at the top right open group.kiosk_media: a dialog with that dropdown and
   # two sliders for the size (input_number.kiosk_media_ancho × kiosk_media_alto). Entity ids are built from it, so
   # triggers_update can't list them: "all" re-renders on any change (cheap, 3 templates).
-  # Folder opens HA's own dialog for the select entity.
+  # Folder opens window.__hazeList: a dialog with the folder dropdown (select.*_reproducir_carpeta)
+  # and the songs of the queue (sensor.*_cola, sent by Haze); tapping a song jumps to it.
   # Size in grid tiles (192 x 96.3 px, 9.6 px gap): the card spans that many columns.
   fusion_media:
     entity: input_select.kiosk_haze
@@ -548,6 +552,118 @@ button_card_templates:
         [[[
           // No llamarla `hass`: button-card ya define esa variable y redeclararla rompe la plantilla.
           const callHass = `(this.getRootNode().host.hass||document.querySelector('home-assistant').hass)`;
+          // Song list dialog. Lives in document.body (outside the card, so it isn't clipped)
+          // and repaints itself from hass.states while it's open.
+          if (!window.__hazeList) {
+            const H = () => document.querySelector('home-assistant').hass;
+            const mk = (tag, cls, text) => {
+              const e = document.createElement(tag);
+              if (cls) e.className = cls;
+              if (text != null) e.textContent = text;
+              return e;
+            };
+            const css = `
+              .hl-bg { position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center;
+                background: rgba(0, 0, 0, 0.55); font-family: "Inter Variable", system-ui; color: rgb(255, 255, 255); }
+              .hl-box { width: min(560px, calc(100vw - 32px)); height: min(600px, calc(100vh - 48px));
+                display: flex; flex-direction: column; background: #1d2328; border-radius: 16px; overflow: hidden;
+                box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5); }
+              .hl-head { display: flex; align-items: center; gap: 8px; padding: 12px 8px 12px 16px;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+              .hl-head ha-icon { color: rgba(255, 255, 255, 0.6); --mdc-icon-size: 22px; }
+              .hl-sel { flex: 1; min-width: 0; height: 44px; padding: 0 12px; border: none; border-radius: 10.4px;
+                background: rgba(255, 255, 255, 0.07); color: inherit; font: 500 16px "Inter Variable", system-ui; outline: none; }
+              .hl-sel option { background: #1d2328; }
+              .hl-x { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; cursor: pointer; }
+              .hl-x ha-icon { color: rgba(255, 255, 255, 0.85); }
+              .hl-songs { position: relative; flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 6px 0; }
+              .hl-row { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 0 16px; cursor: pointer; }
+              .hl-row:active { background: rgba(255, 255, 255, 0.06); }
+              .hl-n { width: 28px; flex: none; text-align: right; font-size: 13px; color: rgba(255, 255, 255, 0.4);
+                font-variant-numeric: tabular-nums; }
+              .hl-n ha-icon { --mdc-icon-size: 20px; }
+              .hl-tx { min-width: 0; }
+              .hl-t, .hl-a { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+              .hl-t { font-size: 15px; font-weight: 500; line-height: 19px; }
+              .hl-a { font-size: 13px; line-height: 17px; color: rgba(255, 255, 255, 0.55); }
+              .hl-row.cur .hl-t, .hl-row.cur .hl-n { color: rgb(242, 196, 107); }
+              .hl-msg { padding: 32px 16px; text-align: center; color: rgba(255, 255, 255, 0.5); font-size: 14px; }`;
+            const L = window.__hazeList = {
+              el: null, p: null, sig: '', optSig: '', t: null,
+              open(p) {
+                this.close();
+                this.p = p;
+                const el = this.el = mk('div', 'hl-bg');
+                el.innerHTML = `<style>${css}</style><div class="hl-box"><div class="hl-head">` +
+                  `<ha-icon icon="mdi:folder-music-outline"></ha-icon><select class="hl-sel"></select>` +
+                  `<div class="hl-x"><ha-icon icon="mdi:close"></ha-icon></div></div><div class="hl-songs"></div></div>`;
+                // The folder button opens this on pointerup; the browser's click comes right after at the
+                // same spot and would hit the song under the finger. Swallow clicks for a moment.
+                const openedAt = Date.now();
+                el.addEventListener('click', (e) => {
+                  if (Date.now() - openedAt < 500) { e.stopImmediatePropagation(); e.preventDefault(); }
+                }, true);
+                el.addEventListener('click', (e) => { if (e.target === el) this.close(); });
+                el.querySelector('.hl-x').addEventListener('click', () => this.close());
+                el.querySelector('.hl-sel').addEventListener('change', (e) =>
+                  H().callService('select', 'select_option', { entity_id: `select.${this.p}_reproducir_carpeta`, option: e.target.value }));
+                document.body.appendChild(el);
+                this.paint(true);
+                this.t = setInterval(() => this.paint(false), 500);
+              },
+              close() {
+                clearInterval(this.t);
+                if (this.el) this.el.remove();
+                this.el = null; this.sig = ''; this.optSig = '';
+              },
+              paint(scroll) {
+                if (!this.el) return;
+                if (!this.el.isConnected) return this.close();
+                const st = H().states;
+                const sel = st[`select.${this.p}_reproducir_carpeta`];
+                const q = st[`sensor.${this.p}_cola`];
+                const qa = (q && q.attributes) || {};
+                // Folder dropdown: the folder that is playing, or the last one picked.
+                const opts = (sel && sel.attributes.options) || [];
+                const cur = opts.includes(qa.context) ? qa.context : (sel && opts.includes(sel.state) ? sel.state : '');
+                const box = this.el.querySelector('.hl-sel');
+                const optSig = JSON.stringify([opts, cur]);
+                if (optSig !== this.optSig && document.activeElement !== box) {
+                  this.optSig = optSig;
+                  box.replaceChildren();
+                  if (!cur) { const o = mk('option', '', 'Choose a folder'); o.value = ''; o.disabled = true; box.append(o); }
+                  for (const n of opts) { const o = mk('option', '', n); o.value = n; box.append(o); }
+                  box.value = cur;
+                }
+                // Songs: only redrawn when the queue changes.
+                const sig = q ? `${q.state}|${q.last_updated}` : 'none';
+                if (sig === this.sig) return;
+                this.sig = sig;
+                const list = this.el.querySelector('.hl-songs');
+                const songs = Array.isArray(qa.songs) ? qa.songs : [];
+                if (!q) return list.replaceChildren(mk('div', 'hl-msg', 'Update Haze to see the song list'));
+                if (q.state === 'unavailable') return list.replaceChildren(mk('div', 'hl-msg', 'Haze is offline'));
+                if (!songs.length) return list.replaceChildren(mk('div', 'hl-msg', 'No songs in the queue'));
+                const rows = songs.map((s, i) => {
+                  const row = mk('div', i === qa.current ? 'hl-row cur' : 'hl-row');
+                  const n = mk('div', 'hl-n');
+                  if (i === qa.current) n.innerHTML = '<ha-icon icon="mdi:volume-high"></ha-icon>';
+                  else n.textContent = String((qa.offset || 0) + i + 1);
+                  const tx = mk('div', 'hl-tx');
+                  tx.append(mk('div', 'hl-t', s.t || 'Unknown'));
+                  if (s.a) tx.append(mk('div', 'hl-a', s.a));
+                  row.append(n, tx);
+                  row.addEventListener('click', () =>
+                    H().callService('mqtt', 'publish', { topic: qa.jump_topic, payload: String(s.u) }));
+                  return row;
+                });
+                if (qa.total > songs.length) rows.push(mk('div', 'hl-msg', `${songs.length} of ${qa.total} songs`));
+                list.replaceChildren(...rows);
+                if (scroll && rows[qa.current]) list.scrollTop = rows[qa.current].offsetTop - list.clientHeight / 2 + 26;
+              },
+            };
+            window.addEventListener('hashchange', () => L.close());
+          }
           const stop = 'event.stopPropagation()';
           const btn = (action, icon, cls) =>
             `<div class="b ${cls}" onpointerup="${stop};${action}" onpointerdown="${stop}" onclick="${stop}" ` +
@@ -557,7 +673,7 @@ button_card_templates:
           const st = states[`sensor.${p}_estado`];
           const shuffle = states[`switch.${p}_aleatorio`];
           const shuffleOn = shuffle && shuffle.state === 'on';
-          const folder = `this.dispatchEvent(new CustomEvent('hass-more-info',{bubbles:true,composed:true,detail:{entityId:'select.${p}_reproducir_carpeta'}}))`;
+          const folder = `window.__hazeList.open('${p}')`;
           const playing = st && st.state === 'playing';
           return btn(`${callHass}.callService('switch','toggle',{entity_id:'switch.${p}_aleatorio'})`, 'mdi:shuffle-variant', shuffleOn ? 'on' : '') +
             btn(press(`button.${p}_anterior`), 'mdi:skip-previous', '') +

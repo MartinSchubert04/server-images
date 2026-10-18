@@ -1,0 +1,2454 @@
+# Home (dashboard-home): the kiosk's fusion style, sized for a desktop browser.
+# Same build as the kiosk: one view per tab here, merged by build_dashboard.py into a
+# single view whose pages switch by #hash. The button-card templates of dashboard.yaml
+# (fusion_tile, fusion_slider, fusion_media, kiosk_nav, fusion_page...) are added at
+# build time, so they're used here as-is; the desk_* ones below make them bigger.
+# Deploy: sh kiosk/deploy.sh home. Edit in HA with ?disable_km (kiosk-mode hides the header).
+
+# HA's own sidebar stays (it's the desktop's navigation); the header goes, the tabs are ours.
+# On a phone-sized window the header comes back, or there'd be no way to open the sidebar.
+kiosk_mode:
+  hide_header: true
+  mobile_settings:
+    custom_width: 900
+    hide_header: false
+
+# Desktop tile: 76 px tall (61 on the kiosk), fills its grid cell.
+x-desk-tile-styles: &desk_tile_styles
+  card:
+    - width: 100%
+    - height: 76px
+  grid:
+    - grid-template-columns: 76px minmax(0, 1fr)
+  img_cell:
+    - width: 46px
+    - height: 46px
+  icon:
+    - width: 26px
+  entity_picture:
+    - width: 46px
+    - height: 46px
+  name:
+    - padding-right: 14px
+    - font-size: 17px
+    - line-height: 21px
+    - max-width: 100%
+    - overflow: hidden
+    - text-overflow: ellipsis
+  state:
+    - padding-right: 14px
+    - font-size: 15.5px
+    - line-height: 20px
+    - max-width: 100%
+    - overflow: hidden
+    - text-overflow: ellipsis
+
+button_card_templates:
+  desk_tile:
+    template: fusion_tile
+    styles: *desk_tile_styles
+    state_display: |
+      [[[
+        if (!entity) return '';
+        const s = entity.state;
+        const map = { on: 'On', off: 'Off', home: 'Home', not_home: 'Away', unavailable: 'Unavailable', unknown: 'Unknown' };
+        if (map[s]) return map[s];
+        if (/^\d{2}:\d{2}:\d{2}$/.test(s)) return s.slice(0, 5);
+        const u = entity.attributes.unit_of_measurement;
+        let v = s;
+        if (s !== '' && !isNaN(s)) {
+          const n = Number(s), a = Math.abs(n);
+          v = String(a >= 100 ? Math.round(n) : a >= 10 ? Math.round(n * 10) / 10 : Math.round(n * 100) / 100);
+        }
+        if (u === '$') return `$${v}`;
+        if (u && u.startsWith('$/')) return `$${v}${u.slice(1)}`;
+        return u ? `${v} ${u}` : v;
+      ]]]
+    # button-card gives a card with its own width "max-width: fit-content": undo it so the tile fills its cell.
+    extra_styles: |
+      :host { max-width: none !important; flex: 1 1 auto !important; }
+
+  # Read-only tile (plugs and anything that shouldn't be touched from here).
+  desk_info:
+    template: desk_tile
+    tap_action: { action: none }
+    hold_action: { action: none }
+
+  desk_slider:
+    template: fusion_slider
+    variables:
+      iw: 76
+    styles: *desk_tile_styles
+    # button-card gives a card with its own width "max-width: fit-content": undo it so the tile fills its cell.
+    extra_styles: |
+      :host { max-width: none !important; flex: 1 1 auto !important; }
+
+  desk_time:
+    template: desk_tile
+    state_display: |
+      [[[
+        const d = new Date(entity.state);
+        return isNaN(d) ? entity.state : d.toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'});
+      ]]]
+
+  desk_uptime:
+    template: desk_tile
+    state_display: |
+      [[[
+        const t = Date.now() - new Date(entity.state).getTime();
+        if (isNaN(t)) return entity.state;
+        const d = Math.floor(t / 864e5), h = Math.floor(t % 864e5 / 36e5), m = Math.floor(t % 36e5 / 6e4);
+        return d ? `${d}d ${h}h` : `${h}h ${m}m`;
+      ]]]
+
+  desk_title:
+    template: fusion_title
+    styles:
+      card:
+        - margin: 0 0 12px
+      name:
+        - font-size: 30px
+        - line-height: 38px
+
+  desk_title_next:
+    template: desk_title
+    styles:
+      card:
+        - margin: 40px 0 12px
+
+  # Big number with the last hours drawn under it (history of the entity) and
+  # its min / max. variables.hours (24) is the span. History is fetched once per
+  # entity every 5 minutes and shared by every card showing it (window.__deskSpark).
+  desk_stat:
+    show_icon: true
+    show_name: true
+    show_state: false
+    tap_action: { action: more-info }
+    hold_action: { action: more-info }
+    variables:
+      hours: 24
+      # 1 = draw from 0 (power, usage); 0 = fit the line to its own range (temperatures).
+      zero: 0
+    custom_fields:
+      val: |
+        [[[
+          if (!entity) return '';
+          const s = entity.state, u = entity.attributes.unit_of_measurement || '';
+          if (s === '' || isNaN(s)) return `<span class="v na">${s}</span>`;
+          const n = Number(s), a = Math.abs(n);
+          const v = a >= 100 ? Math.round(n) : a >= 10 ? Math.round(n * 10) / 10 : Math.round(n * 100) / 100;
+          if (u === '$') return `<span class="v">$${v}</span>`;
+          return `<span class="v">${v}</span><span class="u">${u}</span>`;
+        ]]]
+      spark: |
+        [[[
+          if (!entity) return '';
+          const card = this, id = entity.entity_id, hrs = variables.hours, now = Date.now();
+          const C = window.__deskSpark = window.__deskSpark || {};
+          const key = `${id}|${hrs}|${variables.zero}`;
+          const u = entity.attributes.unit_of_measurement || '';
+          const W = 300, H = 56;
+          const num = (n) => { const a = Math.abs(n); return a >= 100 ? Math.round(n) : a >= 10 ? Math.round(n * 10) / 10 : Math.round(n * 100) / 100; };
+          const draw = (pts, t0, t1) => {
+            if (pts.length < 2) return { svg: '', ext: '' };
+            // Average per bucket (72 over the span); an empty bucket keeps the last value.
+            const B = 72, out = [];
+            let j = 0, last = null;
+            for (let i = 0; i < B; i++) {
+              const b = t0 + (t1 - t0) * (i + 1) / B;
+              let sum = 0, n = 0;
+              while (j < pts.length && pts[j][0] < b) { sum += pts[j][1]; n++; last = pts[j][1]; j++; }
+              const v = n ? sum / n : last;
+              if (v !== null) out.push([t0 + (t1 - t0) * (i + 0.5) / B, v]);
+            }
+            const vals = pts.map((p) => p[1]);
+            const mn = Math.min(...vals), mx = Math.max(...vals);
+            let lo = Math.min(...out.map((p) => p[1])), hi = Math.max(...out.map((p) => p[1]));
+            if (variables.zero && lo > 0) lo = 0;
+            if (hi === lo) { lo -= 1; hi += 1; }
+            const pad = (hi - lo) * 0.12;
+            const x = (t) => (t - t0) / (t1 - t0) * W;
+            const y = (v) => H - 2 - (v - lo) / (hi - lo + pad) * (H - 6);
+            const xy = out.map((p) => [x(p[0]), y(p[1])]);
+            const f = (n) => n.toFixed(1);
+            // d3 curveBasis, as in the kiosk's sidebar graph
+            let d = `M${f(xy[0][0])},${f(xy[0][1])}`;
+            let [x0, y0] = xy[0], [x1, y1] = xy[1];
+            d += `L${f((5 * x0 + x1) / 6)},${f((5 * y0 + y1) / 6)}`;
+            const bez = (xn, yn) => {
+              d += `C${f((2 * x0 + x1) / 3)},${f((2 * y0 + y1) / 3)},${f((x0 + 2 * x1) / 3)},${f((y0 + 2 * y1) / 3)},${f((x0 + 4 * x1 + xn) / 6)},${f((y0 + 4 * y1 + yn) / 6)}`;
+              x0 = x1; y0 = y1; x1 = xn; y1 = yn;
+            };
+            for (let i = 2; i < xy.length; i++) bez(xy[i][0], xy[i][1]);
+            bez(x1, y1);
+            d += `L${f(x1)},${f(y1)}`;
+            const area = `${d}L${f(xy[xy.length - 1][0])},${H}L${f(xy[0][0])},${H}Z`;
+            const svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">` +
+              `<defs><linearGradient id="sg" x1="0" y1="0" x2="0" y2="1">` +
+              `<stop offset="0%" stop-color="#fff" stop-opacity="0.22"/><stop offset="100%" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>` +
+              `<path d="${area}" fill="url(#sg)"/>` +
+              `<path d="${d}" fill="none" stroke="rgba(255,255,255,0.75)" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>`;
+            const unit = u === '$' ? '' : ` ${u}`;
+            return { svg, ext: `${hrs} h · min ${num(mn)} · max ${num(mx)}${unit}` };
+          };
+          const paint = (k) => {
+            for (const c of C[k].cards) {
+              if (!c.isConnected) { C[k].cards.delete(c); continue; }
+              const r = c.shadowRoot;
+              if (!r) continue;
+              const sp = r.querySelector('.sp'), ex = r.querySelector('.x');
+              if (sp) sp.innerHTML = C[k].svg;
+              if (ex) ex.textContent = C[k].ext;
+            }
+          };
+          if (!C[key]) C[key] = { t: 0, svg: '', ext: '', cards: new Set() };
+          C[key].cards.add(card);
+          if (now - C[key].t > 300000) {
+            C[key].t = now;
+            const t0 = now - hrs * 36e5;
+            hass.connection.sendMessagePromise({
+              type: 'history/history_during_period',
+              start_time: new Date(t0).toISOString(),
+              end_time: new Date(now).toISOString(),
+              entity_ids: [id],
+              minimal_response: true,
+              no_attributes: true,
+              significant_changes_only: false,
+            }).then((res) => {
+              const pts = (res[id] || [])
+                .map((r) => [(r.lu || r.lc) * 1000, parseFloat(r.s)])
+                .filter((p) => !isNaN(p[1]));
+              // A value that never changed comes back as one point: draw it flat.
+              if (pts.length === 1) pts.push([now, pts[0][1]]);
+              Object.assign(C[key], draw(pts, t0, now));
+              paint(key);
+            }).catch(() => {});
+          }
+          return `<div class="sp">${C[key].svg}</div>`;
+        ]]]
+      ext: |
+        [[[
+          const C = window.__deskSpark || {};
+          const k = entity ? `${entity.entity_id}|${variables.hours}|${variables.zero}` : '';
+          return `<span class="x">${(C[k] && C[k].ext) || ''}</span>`;
+        ]]]
+    styles:
+      card:
+        - height: 168px
+        - padding: 14px 16px 0
+        - box-sizing: border-box
+        - border: none
+        - border-radius: 10.4px
+        - box-shadow: none
+        - overflow: hidden
+        - background: rgba(0, 0, 0, 0.15)
+        - font-family: '"Inter Variable", system-ui'
+        - color: rgb(255, 255, 255)
+      grid:
+        - grid-template-areas: '"i n" "val val" "ext ext"'
+        - grid-template-columns: 38px minmax(0, 1fr)
+        - grid-template-rows: 38px auto auto
+        - align-content: start
+      img_cell:
+        - width: 38px
+        - height: 38px
+        - border-radius: 50%
+        - background: rgba(255, 255, 255, 0.08)
+      icon:
+        - width: 21px
+        - color: rgba(255, 255, 255, 0.85)
+      name:
+        - justify-self: start
+        - padding-left: 10px
+        - font-size: 16px
+        - font-weight: 500
+        - color: rgba(255, 255, 255, 0.75)
+      custom_fields:
+        val:
+          - justify-self: start
+          - margin-top: 8px
+        ext:
+          - justify-self: start
+        spark:
+          - position: absolute
+          - left: 0
+          - right: 0
+          - bottom: 0
+          - height: 56px
+    extra_styles: |
+      .v { font-size: 34px; font-weight: 600; line-height: 40px; font-variant-numeric: tabular-nums; }
+      .v.na { font-size: 20px; font-weight: 500; color: rgba(255, 255, 255, 0.45); }
+      .u { margin-left: 5px; font-size: 16px; font-weight: 500; color: rgba(255, 255, 255, 0.6); }
+      .x { font-size: 13px; line-height: 18px; color: rgba(255, 255, 255, 0.5); font-variant-numeric: tabular-nums; }
+      .sp, .sp svg { display: block; width: 100%; height: 56px; }
+
+  # Tab bar: the kiosk's, bigger.
+  desk_tabs:
+    template: fusion_tabs
+    # A template (not a YAML list): a list would be merged item by item with the kiosk's tabs.
+    variables:
+      tabs: |
+        [[[ return [['overview', 'Overview'], ['server', 'Server'], ['network', 'Network'], ['weather', 'Weather'],
+          ['traffic', 'Traffic'], ['energy', 'Energy'], ['lights', 'Lights'], ['automations', 'Automations']]; ]]]
+    styles:
+      card:
+        - margin: 0 0 34px
+      custom_fields:
+        tabs:
+          - gap: 30px
+    extra_styles: |
+      .tab {
+        position: relative;
+        pointer-events: auto;
+        cursor: pointer;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+        user-select: none;
+        flex: 0 0 auto;
+        padding: 14px 11px 16px;
+        margin: 0 -11px;
+        font-size: 26px;
+        font-weight: 700;
+        line-height: 32px;
+        color: rgba(255, 255, 255, 0.4);
+        transition: color 0.15s;
+      }
+      .tab:hover { color: rgba(255, 255, 255, 0.7); }
+      #tabs::-webkit-scrollbar, [id="tabs"]::-webkit-scrollbar { display: none; }
+      .tab.active { color: rgb(255, 255, 255); }
+      .tab.active::after {
+        content: "";
+        position: absolute;
+        left: 11px;
+        right: 11px;
+        bottom: 9px;
+        height: 2px;
+        background: rgb(255, 255, 255);
+      }
+
+  # Haze on a desktop: fills its column, 360 px tall. The three dots of the kiosk
+  # (tile size) don't apply here.
+  desk_media:
+    template: fusion_media
+    styles:
+      card:
+        - width: 100%
+        - height: 360px
+      custom_fields:
+        info:
+          - left: 22px
+          - right: 22px
+          - bottom: 82px
+        ctl:
+          - bottom: 16px
+          - gap: 24px
+        dev:
+          - display: none
+    extra_styles: |
+      :host { max-width: none !important; flex: 1 1 auto !important; grid-column: auto !important; }
+      #bg .pic { position: absolute; inset: 0; background-size: cover; background-position: center; }
+      #bg::after {
+        content: ''; position: absolute; inset: 0;
+        background: linear-gradient(180deg, rgba(10, 13, 16, 0) 0%, rgba(10, 13, 16, 0.35) 40%, rgba(10, 13, 16, 0.92) 78%, rgba(10, 13, 16, 0.97) 100%);
+      }
+      #bg ha-icon { --mdc-icon-size: 64px; margin-bottom: 90px; }
+      .t, .s { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .t { font-size: 21px; font-weight: 600; line-height: 27px; }
+      .s { font-size: 16px; line-height: 21px; color: rgba(255, 255, 255, 0.7); }
+      .b {
+        width: 46px; height: 46px; display: grid; place-items: center;
+        cursor: pointer; pointer-events: auto; color: rgba(255, 255, 255, 0.85);
+        border-radius: 50%; transition: transform 0.1s, background 0.15s;
+      }
+      .b:hover { background: rgba(255, 255, 255, 0.1); }
+      .b ha-icon { --mdc-icon-size: 26px; }
+      .b.on { color: rgb(242, 196, 107); }
+      .b.main { width: 56px; height: 56px; background: rgba(255, 255, 255, 0.92); color: rgb(30, 33, 36); }
+      .b.main ha-icon { --mdc-icon-size: 32px; }
+      .b:active { transform: scale(0.92); }
+
+  # Plain surface for the hand-made cards below (disks, processes, cores, lists).
+  desk_panel:
+    show_icon: false
+    show_name: false
+    show_state: false
+    tap_action: { action: none }
+    hold_action: { action: none }
+    styles:
+      card:
+        - padding: 18px 20px
+        - border: none
+        - border-radius: 10.4px
+        - box-shadow: none
+        - background: rgba(0, 0, 0, 0.15)
+        - font-family: '"Inter Variable", system-ui'
+        - color: rgb(255, 255, 255)
+      grid:
+        - grid-template-areas: '"c"'
+        - grid-template-columns: minmax(0, 1fr)
+      custom_fields:
+        c:
+          - justify-self: stretch
+          - text-align: left
+          - pointer-events: auto
+
+# ---- Shared building blocks (YAML anchors, expanded on save) ----
+
+x-sidebar: &sidebar
+  type: vertical-stack
+  view_layout:
+    grid-area: side
+  card_mod:
+    style: |
+      :host {
+        display: block;
+        /* Fixed without "left": it stays where the grid puts it, right of HA's own sidebar. */
+        position: fixed;
+        top: 0;
+        width: 400px;
+        height: 100vh;
+        overflow-y: auto;
+        scrollbar-width: none;
+        z-index: 1;
+        box-sizing: border-box;
+        padding: 0 28px 28px;
+        background: rgba(0, 0, 0, 0.06);
+        border-right: 1px solid rgba(115, 115, 115, 0.25);
+        font-family: "Inter Variable", system-ui;
+      }
+      :host::-webkit-scrollbar { display: none; }
+      @media (max-width: 1100px) {
+        :host { position: static; width: auto; height: auto; border-right: none; border-bottom: 1px solid rgba(115, 115, 115, 0.25); }
+      }
+  cards:
+    # Clock and date
+    - type: custom:button-card
+      show_icon: false
+      show_name: true
+      show_state: false
+      show_label: true
+      triggers_update: all
+      label: |
+        [[[ return new Date().toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'}); ]]]
+      name: |
+        [[[ return new Date().toLocaleDateString('en-US', {weekday: 'long', month: 'long', day: 'numeric'}); ]]]
+      tap_action: { action: none }
+      styles:
+        card:
+          - background: none
+          - border: none
+          - box-shadow: none
+          - padding: 22px 0 0 4px
+          - font-family: '"Inter Variable", system-ui'
+        grid:
+          - grid-template-areas: '"l" "n"'
+          - grid-template-rows: auto auto
+        label:
+          - justify-self: start
+          - font-size: 80px
+          - font-weight: 500
+          - line-height: 90px
+          - letter-spacing: -1px
+          - color: rgba(255, 255, 255, 0.85)
+        name:
+          - justify-self: start
+          - font-size: 19px
+          - line-height: 24px
+          - color: rgba(255, 255, 255, 0.7)
+    # Now: condition, temperature and the details that matter.
+    - type: custom:button-card
+      entity: weather.clima
+      show_icon: false
+      show_name: false
+      show_state: false
+      tap_action: { action: more-info }
+      custom_fields:
+        now: |
+          [[[
+            const a = entity.attributes;
+            const names = {'clear-night': 'Clear', cloudy: 'Cloudy', fog: 'Fog', hail: 'Hail', lightning: 'Storm',
+              'lightning-rainy': 'Storm', partlycloudy: 'Partly cloudy', pouring: 'Pouring', rainy: 'Rain',
+              snowy: 'Snow', 'snowy-rainy': 'Sleet', sunny: 'Sunny', windy: 'Windy', 'windy-variant': 'Windy', exceptional: 'Exceptional'};
+            const day = (states['sun.sun'] || {}).state !== 'below_horizon';
+            const icon = `/local/kiosk/meteocons/${entity.state}-${day ? 'day' : 'night'}.svg`;
+            const r = (v) => v === undefined || v === null ? '-' : Math.round(v);
+            return `<div class="top"><img src="${icon}"><div><div class="t">${r(a.temperature)}°</div>` +
+              `<div class="c">${names[entity.state] || entity.state}</div></div></div>` +
+              `<div class="det"><span><ha-icon icon="mdi:thermometer-lines"></ha-icon>Feels ${r(a.apparent_temperature)}°</span>` +
+              `<span><ha-icon icon="mdi:water-percent"></ha-icon>${r(a.humidity)} %</span>` +
+              `<span><ha-icon icon="mdi:weather-windy"></ha-icon>${r(a.wind_speed)} km/h</span></div>`;
+          ]]]
+      styles:
+        card:
+          - background: none
+          - border: none
+          - box-shadow: none
+          - padding: 26px 0 0
+          - font-family: '"Inter Variable", system-ui'
+          - color: rgba(255, 255, 255, 0.85)
+        grid:
+          - grid-template-areas: '"now"'
+        custom_fields:
+          now:
+            - justify-self: stretch
+      extra_styles: |
+        .top { display: flex; align-items: center; gap: 10px; }
+        .top img { width: 96px; height: 96px; margin: -12px -4px -12px -10px; }
+        .t { font-size: 52px; font-weight: 500; line-height: 58px; text-align: left; }
+        .c { font-size: 17px; color: rgba(255, 255, 255, 0.7); text-align: left; }
+        .det { display: flex; justify-content: space-between; margin-top: 16px; font-size: 15px; color: rgba(255, 255, 255, 0.7); }
+        .det span { display: flex; align-items: center; gap: 5px; }
+        .det ha-icon { --mdc-icon-size: 18px; width: 18px; height: 18px; display: flex; color: rgba(255, 255, 255, 0.5); }
+    # Next hours (every 2 h) and the week, from Open-Meteo (packages/clima.yaml).
+    - type: custom:button-card
+      entity: sensor.clima_pronostico_horario
+      show_icon: false
+      show_name: false
+      show_state: false
+      tap_action: { action: more-info, entity: weather.clima }
+      custom_fields:
+        f: |
+          [[[
+            const cond = {0: 'sunny', 1: 'sunny', 2: 'partlycloudy', 3: 'cloudy', 45: 'fog', 48: 'fog',
+              51: 'rainy', 53: 'rainy', 55: 'rainy', 56: 'snowy-rainy', 57: 'snowy-rainy',
+              61: 'rainy', 63: 'rainy', 65: 'pouring', 66: 'snowy-rainy', 67: 'snowy-rainy',
+              71: 'snowy', 73: 'snowy', 75: 'snowy', 77: 'snowy', 80: 'rainy', 81: 'rainy', 82: 'pouring',
+              85: 'snowy', 86: 'snowy', 95: 'lightning-rainy', 96: 'lightning-rainy', 99: 'lightning-rainy'};
+            const h = entity.attributes, d = (states['sensor.clima_pronostico_diario'] || {}).attributes || {};
+            const now = Date.now() - 36e5;
+            const hours = (h.time || []).map((t, i) => [t, i]).filter(([t]) => new Date(t).getTime() >= now)
+              .filter((_, k) => k % 2 === 0).slice(0, 7);
+            const strip = hours.map(([t, i]) => {
+              // At night a clear sky is the moon (meteocons' sunny-night is still a sun).
+              let c = cond[h.weather_code[i]] || 'cloudy';
+              if (!h.is_day[i] && c === 'sunny') c = 'clear-night';
+              const ic = c + (h.is_day[i] ? '-day' : '-night');
+              const p = h.precipitation_probability[i];
+              return `<div class="h"><div class="hh">${t.slice(11, 13)}h</div><img src="/local/kiosk/meteocons/${ic}.svg">` +
+                `<div class="ht">${Math.round(h.temperature_2m[i])}°</div><div class="hp">${p ? p + '%' : ''}</div></div>`;
+            }).join('');
+            const days = (d.time || []).slice(0, 7);
+            const lo = Math.min(...d.temperature_2m_min.slice(0, 7)), hi = Math.max(...d.temperature_2m_max.slice(0, 7));
+            const week = days.map((t, i) => {
+              const name = i === 0 ? 'Today' : new Date(t + 'T12:00:00').toLocaleDateString('en-US', {weekday: 'short'});
+              const mn = d.temperature_2m_min[i], mx = d.temperature_2m_max[i], p = d.precipitation_probability_max[i];
+              const l = (mn - lo) / (hi - lo || 1) * 100, w = (mx - mn) / (hi - lo || 1) * 100;
+              return `<div class="d"><span class="dn">${name}</span>` +
+                `<img src="/local/kiosk/meteocons/${cond[d.weather_code[i]] || 'cloudy'}-day.svg">` +
+                `<span class="dp">${p >= 10 ? p + '%' : ''}</span><span class="lo">${Math.round(mn)}°</span>` +
+                `<span class="bar"><i style="left:${l.toFixed(1)}%;width:${Math.max(w, 4).toFixed(1)}%"></i></span>` +
+                `<span class="hi">${Math.round(mx)}°</span></div>`;
+            }).join('');
+            return `<div class="strip">${strip}</div><div class="lbl">This week</div><div class="week">${week}</div>`;
+          ]]]
+      styles:
+        card:
+          - background: none
+          - border: none
+          - box-shadow: none
+          - padding: 26px 0 0
+          - overflow: visible
+          - font-family: '"Inter Variable", system-ui'
+          - color: rgba(255, 255, 255, 0.85)
+        grid:
+          - grid-template-areas: '"f"'
+        custom_fields:
+          f:
+            - justify-self: stretch
+      extra_styles: |
+        ha-card { overflow: visible !important; }
+        .strip { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); text-align: center; font-size: 14px;
+          padding: 12px 0 10px; border-top: 1px solid rgba(255, 255, 255, 0.08); border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+        .hh { color: rgba(255, 255, 255, 0.55); line-height: 18px; }
+        .strip img { width: 40px; height: 40px; margin: 0 auto; display: block; }
+        .ht { font-size: 15px; font-weight: 500; line-height: 20px; }
+        .hp { height: 16px; font-size: 12px; line-height: 16px; color: rgb(75, 166, 237); }
+        .lbl { margin: 22px 0 6px; font-size: 16px; text-align: left; color: rgba(255, 255, 255, 0.8); }
+        .d { display: grid; grid-template-columns: 54px 36px 38px 30px minmax(0, 1fr) 30px; align-items: center;
+          height: 38px; font-size: 15px; text-align: left; }
+        .d img { width: 34px; height: 34px; }
+        .dn { color: rgba(255, 255, 255, 0.85); }
+        .dp { font-size: 12.5px; color: rgb(75, 166, 237); text-align: center; }
+        .lo { color: rgba(255, 255, 255, 0.5); text-align: right; padding-right: 8px; }
+        .hi { text-align: right; }
+        .bar { position: relative; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.08); }
+        .bar i { position: absolute; top: 0; bottom: 0; border-radius: 2px;
+          background: linear-gradient(90deg, rgb(120, 180, 230), rgb(242, 196, 107)); }
+    # Temperature, last 7 days (hourly statistics), with its range.
+    - type: custom:button-card
+      entity: sensor.clima_temperatura
+      name: Temperature · 7 days
+      show_icon: false
+      show_state: false
+      show_label: true
+      label: |
+        [[[ return `${entity.state} ${entity.attributes.unit_of_measurement || ''}`; ]]]
+      tap_action: { action: more-info }
+      custom_fields:
+        graph: |
+          [[[
+            const W = 344, H = 90, card = this, now = Date.now();
+            const draw = (rows) => {
+              const pts = rows.map((r) => [new Date(r.start).getTime(), r.mean ?? r.state]).filter((p) => p[1] !== null && p[1] !== undefined);
+              if (pts.length < 2) return '';
+              const mn = Math.min(...pts.map((p) => p[1])), mx = Math.max(...pts.map((p) => p[1]));
+              const lo = mn - 1, hi = mx + 1;
+              const t0 = pts[0][0], t1 = pts[pts.length - 1][0];
+              const x = (t) => 1 + (t - t0) / (t1 - t0 || 1) * (W - 2);
+              const y = (v) => (H - 1) - (v - lo) / (hi - lo) * (H - 2);
+              const xy = pts.map((p) => [x(p[0]), y(p[1])]);
+              const f = (n) => n.toFixed(2);
+              let d = `M${f(xy[0][0])},${f(xy[0][1])}`;
+              let [x0, y0] = xy[0], [x1, y1] = xy[1];
+              d += `L${f((5 * x0 + x1) / 6)},${f((5 * y0 + y1) / 6)}`;
+              const bez = (xn, yn) => {
+                d += `C${f((2 * x0 + x1) / 3)},${f((2 * y0 + y1) / 3)},${f((x0 + 2 * x1) / 3)},${f((y0 + 2 * y1) / 3)},${f((x0 + 4 * x1 + xn) / 6)},${f((y0 + 4 * y1 + yn) / 6)}`;
+                x0 = x1; y0 = y1; x1 = xn; y1 = yn;
+              };
+              for (let i = 2; i < xy.length; i++) bez(xy[i][0], xy[i][1]);
+              bez(x1, y1);
+              d += `L${f(x1)},${f(y1)}`;
+              const area = `${d}L${f(xy[xy.length - 1][0])},${H - 1}L${f(xy[0][0])},${H - 1}Z`;
+              // One tick per midnight
+              let ticks = '';
+              const m = new Date(t0); m.setHours(24, 0, 0, 0);
+              for (let t = m.getTime(); t < t1; t += 864e5) ticks += `<line x1="${f(x(t))}" y1="0" x2="${f(x(t))}" y2="${H}" stroke="rgba(255,255,255,0.07)"/>`;
+              return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">` +
+                `<defs><linearGradient id="kg" x1="0" y1="0" x2="0" y2="1">` +
+                `<stop offset="0%" stop-color="#fff" stop-opacity="0.45"/><stop offset="100%" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>` +
+                ticks + `<path d="${area}" fill="url(#kg)"/><path d="${d}" fill="none" stroke="#fff" stroke-width="1"/></svg>` +
+                `<div class="rg"><span>min ${Math.round(mn)}°</span><span>max ${Math.round(mx)}°</span></div>`;
+            };
+            const cache = window.__deskGraphs = window.__deskGraphs || {};
+            const key = entity.entity_id;
+            if (!cache[key] || now - cache[key].t > 600000) {
+              cache[key] = { t: now, svg: cache[key] ? cache[key].svg : '' };
+              hass.connection.sendMessagePromise({
+                type: 'recorder/statistics_during_period',
+                start_time: new Date(now - 7 * 864e5).toISOString(),
+                end_time: new Date(now).toISOString(),
+                statistic_ids: [key],
+                period: 'hour',
+              }).then((res) => {
+                cache[key].svg = draw(res[key] || []);
+                const el = card.shadowRoot && card.shadowRoot.getElementById('kgraph');
+                if (el) el.innerHTML = cache[key].svg;
+              }).catch(() => {});
+            }
+            return `<div id="kgraph">${cache[key].svg}</div>`;
+          ]]]
+      styles:
+        card:
+          - background: none
+          - border: none
+          - box-shadow: none
+          - border-radius: 0
+          - padding: 0
+          - margin-top: 26px
+          - font-family: '"Inter Variable", system-ui'
+        grid:
+          - grid-template-areas: '"n" "l" "graph"'
+          - grid-template-rows: 22px 26px auto
+        name:
+          - justify-self: start
+          - font-size: 16px
+          - color: rgba(255, 255, 255, 0.8)
+        label:
+          - justify-self: start
+          - font-size: 16px
+          - color: rgba(255, 255, 255, 0.8)
+        custom_fields:
+          graph:
+            - margin-top: 8px
+            - line-height: 0
+      extra_styles: |
+        .rg { display: flex; justify-content: space-between; margin-top: 8px; font-size: 13px; line-height: 16px; color: rgba(255, 255, 255, 0.5); }
+    # Sun: today's sunrise and sunset, and how long the day is.
+    - type: custom:button-card
+      entity: sun.sun
+      show_icon: false
+      show_name: false
+      show_state: false
+      triggers_update: [sensor.sun_next_rising, sensor.sun_next_setting]
+      tap_action: { action: javascript, javascript: "[[[ location.hash = 'sun'; ]]]" }
+      custom_fields:
+        s: |
+          [[[
+            const t = (id) => new Date((states[id] || {}).state).getTime();
+            const up = entity.state === 'above_horizon';
+            const rise = up ? t('sensor.sun_next_rising') - 864e5 : t('sensor.sun_next_rising');
+            const set = t('sensor.sun_next_setting');
+            const hm = (ms) => isNaN(ms) ? '--:--' : new Date(ms).toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'});
+            const len = set - rise, lh = Math.floor(len / 36e5), lm = Math.round(len % 36e5 / 6e4);
+            return `<span><ha-icon icon="mdi:weather-sunset-up"></ha-icon>${hm(rise)}</span>` +
+              `<span class="m">${isNaN(len) ? '' : `${lh} h ${lm} min of light`}</span>` +
+              `<span><ha-icon icon="mdi:weather-sunset-down"></ha-icon>${hm(set)}</span>`;
+          ]]]
+      styles:
+        card:
+          - background: none
+          - border: none
+          - box-shadow: none
+          - padding: 14px 0 0
+          - margin-top: 22px
+          - border-top: 1px solid rgba(255, 255, 255, 0.08)
+          - border-radius: 0
+          - font-family: '"Inter Variable", system-ui'
+        grid:
+          - grid-template-areas: '"s"'
+        custom_fields:
+          s:
+            - justify-self: stretch
+            - display: flex
+            - justify-content: space-between
+            - align-items: center
+            - font-size: 15px
+            - color: rgba(255, 255, 255, 0.8)
+      extra_styles: |
+        #s span { display: flex; align-items: center; gap: 6px; }
+        #s .m { font-size: 13px; color: rgba(255, 255, 255, 0.5); }
+        #s ha-icon { --mdc-icon-size: 20px; width: 20px; height: 20px; display: flex; color: rgba(255, 255, 255, 0.55); }
+
+# Sidebar 400 px + content. Below 1100 px the sidebar goes on top.
+x-layout: &layout
+  grid-template-columns: 400px minmax(0, 1fr)
+  grid-template-rows: auto
+  grid-template-areas: '"side main"'
+  grid-gap: 0
+  margin: 0
+  padding: 0
+  card_margin: 0px
+  mediaquery:
+    "(max-width: 1100px)":
+      grid-template-columns: minmax(0, 1fr)
+      grid-template-areas: '"side" "main"'
+
+x-main-layout: &main_layout
+  padding: 30px 44px 56px
+  margin: 0
+  card_margin: 0px
+  grid-template-columns: minmax(0, 1fr)
+  grid-gap: 0
+  mediaquery:
+    "(max-width: 700px)":
+      padding: 20px 16px 40px
+
+x-tiles-layout: &tiles_layout
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr))
+  grid-gap: 12px
+  margin: 0
+  padding: 0
+  card_margin: 0px
+
+x-stats-layout: &stats_layout
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr))
+  grid-gap: 12px
+  margin: 0
+  padding: 0
+  card_margin: 0px
+
+# Two columns on a normal desktop, three on a very wide one, one on a narrow window.
+x-columns-layout: &columns_layout
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr)
+  grid-gap: 0 40px
+  margin: 0
+  padding: 0
+  card_margin: 0px
+  mediaquery:
+    "(max-width: 1500px)":
+      grid-template-columns: minmax(0, 1fr)
+    "(min-width: 2400px)":
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)
+
+x-charts-layout: &charts_layout
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr))
+  grid-gap: 12px
+  margin: 0
+  padding: 0
+  card_margin: 0px
+
+views:
+  - title: Overview
+    path: overview
+    type: custom:grid-layout
+    theme: MRTN Kiosk
+    layout: *layout
+    cards:
+      - *sidebar
+      - type: custom:layout-card
+        layout_type: custom:grid-layout
+        layout: *main_layout
+        view_layout:
+          grid-area: main
+        cards:
+          - type: custom:button-card
+            template: desk_tabs
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout: *columns_layout
+            cards:
+              - type: vertical-stack
+                cards:
+                  - type: custom:button-card
+                    template: desk_title
+                    name: Room
+                  - type: custom:layout-card
+                    layout_type: custom:grid-layout
+                    layout: *tiles_layout
+                    cards:
+                      - type: custom:button-card
+                        template: desk_slider
+                        entity: light.room
+                        name: Lights
+                        view_layout:
+                          grid-column: 1 / -1
+                      # Wake on LAN. On/off comes from the PC's plug (more than 30 W = on).
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.enchufe_inteligente_4_power
+                        name: PC
+                        icon: mdi:desktop-tower-monitor
+                        state_display: |
+                          [[[ const w = Number(entity.state); return isNaN(w) ? entity.state : w > 30 ? `On · ${Math.round(w)} W` : 'Off · tap to wake'; ]]]
+                        tap_action:
+                          action: javascript
+                          javascript: |
+                            [[[ if (Number(entity.state) <= 30) hass.callService('button', 'press', {entity_id: 'button.encender_pc'}); ]]]
+                        hold_action: { action: none }
+                        styles:
+                          img_cell:
+                            - background: |
+                                [[[ return Number(entity.state) > 30 ? 'rgb(131, 129, 124)' : 'none'; ]]]
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sun.sun
+                        name: Sun
+                        icon: |
+                          [[[ return entity.state === 'above_horizon' ? 'mdi:weather-sunny' : 'mdi:weather-night'; ]]]
+                        state_display: |
+                          [[[ return {above_horizon: 'Above horizon', below_horizon: 'Below horizon'}[entity.state] || entity.state; ]]]
+                        tap_action: { action: navigate, navigation_path: sun }
+                  - type: custom:button-card
+                    template: desk_title_next
+                    name: Media
+                  - type: custom:button-card
+                    template: desk_media
+                  - type: custom:button-card
+                    template: desk_title_next
+                    name: Energy
+                  - type: custom:layout-card
+                    layout_type: custom:grid-layout
+                    layout: *tiles_layout
+                    cards:
+                      - type: custom:button-card
+                        template: desk_info
+                        entity: sensor.enchufe_inteligente_4_power
+                        name: PC power
+                        icon: mdi:flash
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.server_costo_hoy
+                        name: Server today
+                        icon: mdi:cash
+                        tap_action: { action: navigate, navigation_path: energy }
+                      # Month so far and where it's heading, all three plugs together.
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.server_costo_mes
+                        name: This month
+                        icon: mdi:calendar-month
+                        state_display: |
+                          [[[
+                            const sum = (k) => ['server', 'pc_main', 'ac'].reduce((t, e) => t + (Number((states[`sensor.${e}_${k}`] || {}).state) || 0), 0);
+                            return `$${Math.round(sum('costo_mes'))} · heading to $${Math.round(sum('proyeccion_mes'))}`;
+                          ]]]
+                        tap_action: { action: navigate, navigation_path: energy }
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.tarifa_precio_final
+                        name: Tariff
+                        icon: mdi:cash-check
+                        tap_action: { action: navigate, navigation_path: energy }
+              - type: vertical-stack
+                cards:
+                  - type: custom:button-card
+                    template: desk_title
+                    name: Me
+                  - type: custom:layout-card
+                    layout_type: custom:grid-layout
+                    layout: *tiles_layout
+                    cards:
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: device_tracker.a35_martin
+                        name: Martin
+                        state_display: |
+                          [[[
+                            const z = {home: 'Home', not_home: 'Away'}[entity.state] || entity.state;
+                            const b = states['sensor.a35_martin_battery_level'];
+                            return b ? `${z} · ${b.state} %` : z;
+                          ]]]
+                        tap_action: { action: navigate, navigation_path: map }
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.ruta_tiempo
+                        name: Travel time
+                        state_display: |
+                          [[[
+                            const dl = Number((states['sensor.ruta_demora'] || {}).state);
+                            return `${entity.state} min` + (dl > 0 ? ` · +${dl} traffic` : '');
+                          ]]]
+                        tap_action: { action: navigate, navigation_path: traffic }
+                      # Swaps origin and destination (way there / way back).
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: input_text.ruta_destino
+                        name: Route
+                        icon: mdi:swap-horizontal
+                        state_display: |
+                          [[[
+                            const d = entity.state && !['unknown', 'unavailable'].includes(entity.state) ? entity.state.split(',')[0] : '-';
+                            return `to ${d}`;
+                          ]]]
+                        tap_action:
+                          action: javascript
+                          javascript: |
+                            [[[
+                              const o = states['input_text.ruta_origen'].state;
+                              const d = states['input_text.ruta_destino'].state;
+                              hass.callService('input_text', 'set_value', {entity_id: 'input_text.ruta_origen', value: d});
+                              hass.callService('input_text', 'set_value', {entity_id: 'input_text.ruta_destino', value: o});
+                            ]]]
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.ruta_en_moto
+                        name: Ride
+                        state_display: |
+                          [[[ return entity.attributes.motivo ? `${entity.state} · ${entity.attributes.motivo}` : entity.state; ]]]
+                  - type: custom:button-card
+                    template: desk_title_next
+                    name: Server
+                  - type: custom:layout-card
+                    layout_type: custom:grid-layout
+                    layout: *stats_layout
+                    cards:
+                      - type: custom:button-card
+                        template: desk_stat
+                        entity: sensor.host_docker_internal_cpu_usage
+                        name: CPU
+                        icon: mdi:cpu-64-bit
+                        variables: { zero: 1 }
+                      - type: custom:button-card
+                        template: desk_stat
+                        entity: sensor.host_docker_internal_memory_usage
+                        name: Memory
+                        icon: mdi:memory
+                        variables: { zero: 1 }
+                      - type: custom:button-card
+                        template: desk_stat
+                        entity: sensor.bedroom_plug_server_power
+                        name: Server power
+                        icon: mdi:flash
+                        tap_action: { action: none }
+                        hold_action: { action: none }
+                        variables: { zero: 1 }
+                      - type: custom:button-card
+                        template: desk_stat
+                        entity: sensor.host_docker_internal_package_id_0_temperature
+                        name: CPU temp
+                        icon: mdi:thermometer
+                  - type: custom:button-card
+                    template: desk_title_next
+                    name: Network
+                  - type: custom:layout-card
+                    layout_type: custom:grid-layout
+                    layout: *tiles_layout
+                    cards:
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: switch.adguard_home_protection
+                        name: AdGuard
+                        icon: mdi:shield-check
+                        tap_action: { action: toggle }
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.tp_link_router_total_clients
+                        name: Clients
+                        icon: mdi:devices
+                        state_display: |
+                          [[[
+                            const w = (states['sensor.tp_link_router_total_main_wifi_clients'] || {}).state;
+                            return `${entity.state} · ${w} on Wi-Fi`;
+                          ]]]
+                        tap_action: { action: navigate, navigation_path: network }
+
+  - title: Server
+    path: server
+    type: custom:grid-layout
+    theme: MRTN Kiosk
+    layout: *layout
+    cards:
+      - *sidebar
+      - type: custom:layout-card
+        layout_type: custom:grid-layout
+        layout: *main_layout
+        view_layout:
+          grid-area: main
+        cards:
+          - type: custom:button-card
+            template: desk_tabs
+          # MRTN-SERVER (Linux host, via Glances)
+          - type: custom:button-card
+            template: desk_title
+            name: MRTN-SERVER
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout: *stats_layout
+            cards:
+              - type: custom:button-card
+                template: desk_stat
+                entity: sensor.host_docker_internal_cpu_usage
+                name: CPU
+                icon: mdi:cpu-64-bit
+                variables: { zero: 1 }
+              - type: custom:button-card
+                template: desk_stat
+                entity: sensor.host_docker_internal_memory_usage
+                name: Memory
+                icon: mdi:memory
+                variables: { zero: 1 }
+              - type: custom:button-card
+                template: desk_stat
+                entity: sensor.host_docker_internal_package_id_0_temperature
+                name: CPU temp
+                icon: mdi:thermometer
+              - type: custom:button-card
+                template: desk_stat
+                entity: sensor.bedroom_plug_server_power
+                name: Power
+                icon: mdi:flash
+                tap_action: { action: none }
+                hold_action: { action: none }
+                variables: { zero: 1 }
+              - type: custom:button-card
+                template: desk_stat
+                entity: sensor.host_docker_internal_nvidia_geforce_rtx_2060_super_gpu_nvidia0_processor_usage
+                name: GPU
+                icon: mdi:expansion-card
+                variables: { zero: 1 }
+              - type: custom:button-card
+                template: desk_stat
+                entity: sensor.host_docker_internal_nvidia_geforce_rtx_2060_super_gpu_nvidia0_temperature
+                name: GPU temp
+                icon: mdi:thermometer
+              - type: custom:button-card
+                template: desk_stat
+                entity: sensor.host_docker_internal_wlxdc6279d174da_rx
+                name: Wi-Fi down
+                icon: mdi:download
+                variables: { zero: 1 }
+              - type: custom:button-card
+                template: desk_stat
+                entity: sensor.host_docker_internal_wlxdc6279d174da_tx
+                name: Wi-Fi up
+                icon: mdi:upload
+                variables: { zero: 1 }
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout:
+              <<: *tiles_layout
+              margin: 12px 0 0
+            cards:
+              - type: custom:button-card
+                template: desk_uptime
+                entity: sensor.host_docker_internal_uptime
+                name: Uptime
+                icon: mdi:timer-outline
+              - type: custom:button-card
+                template: desk_tile
+                entity: sensor.host_docker_internal_composite_temperature
+                name: NVMe temp
+                icon: mdi:harddisk
+              - type: custom:button-card
+                template: desk_tile
+                entity: sensor.host_docker_internal_it8689_70020407_0_fan_speed
+                name: CPU fan
+                icon: mdi:fan
+              - type: custom:button-card
+                template: desk_tile
+                entity: sensor.host_docker_internal_nvidia_geforce_rtx_2060_super_gpu_nvidia0_memory_usage
+                name: VRAM
+                icon: mdi:memory
+              - type: custom:button-card
+                template: desk_tile
+                entity: sensor.host_docker_internal_swap_usage
+                name: Swap
+                icon: mdi:swap-horizontal
+              - type: custom:button-card
+                template: desk_tile
+                entity: sensor.host_docker_internal_cpu_load
+                name: Load
+                icon: mdi:gauge
+              - type: custom:button-card
+                template: desk_tile
+                entity: sensor.host_docker_internal_tailscale0_rx
+                name: Tailscale down
+                icon: mdi:vpn
+              - type: custom:button-card
+                template: desk_tile
+                entity: sensor.host_docker_internal_tailscale0_tx
+                name: Tailscale up
+                icon: mdi:vpn
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout: *columns_layout
+            cards:
+              - type: vertical-stack
+                cards:
+                  - type: custom:button-card
+                    template: desk_title_next
+                    name: Storage
+                  # Disks from sensor.server_procesos (packages/consumo.yaml): used / free,
+                  # and what fills the system disk.
+                  - type: custom:button-card
+                    template: desk_panel
+                    entity: sensor.server_procesos
+                    custom_fields:
+                      c: |
+                        [[[
+                          const fmt = (b) => b >= 1e12 ? `${(b / 1e12).toFixed(2)} TB` : b >= 1e10 ? `${Math.round(b / 1e9)} GB` : `${(b / 1e9).toFixed(1)} GB`;
+                          const names = {'/': 'System', '/mnt/c': 'Windows (C:)', '/mnt/pendrive': 'Pendrive'};
+                          const cols = ['rgb(75, 166, 237)', 'rgb(242, 196, 107)', 'rgb(130, 200, 150)', 'rgb(230, 120, 120)',
+                            'rgb(180, 150, 225)', 'rgb(100, 200, 205)', 'rgb(225, 165, 120)', 'rgb(200, 200, 200)'];
+                          return (entity.attributes.discos || []).map((d) => {
+                            const used = d.total - d.libre, pct = used / d.total * 100;
+                            let bar = '', legend = '';
+                            if (d.detalle && d.detalle.length) {
+                              const parts = d.detalle.map((p, i) => [p.nombre, p.bytes, cols[i % cols.length]]);
+                              const rest = used - d.detalle.reduce((s, p) => s + p.bytes, 0);
+                              if (rest > 0) parts.push(['Other', rest, 'rgba(255, 255, 255, 0.3)']);
+                              bar = parts.map(([, b, c]) => `<i style="width:${(b / d.total * 100).toFixed(2)}%;background:${c}"></i>`).join('');
+                              legend = '<div class="lg">' + parts.map(([n, b, c]) =>
+                                `<span><b style="background:${c}"></b>${n}<em>${fmt(b)}</em></span>`).join('') + '</div>';
+                            } else {
+                              const c = pct > 90 ? 'rgb(230, 120, 120)' : pct > 75 ? 'rgb(242, 196, 107)' : 'rgba(255, 255, 255, 0.8)';
+                              bar = `<i style="width:${pct.toFixed(1)}%;background:${c}"></i>`;
+                            }
+                            return `<div class="dk"><div class="h"><span class="n">${names[d.letra] || d.letra}<small>${d.letra}</small></span>` +
+                              `<span class="s">${fmt(used)} of ${fmt(d.total)} · <b>${fmt(d.libre)} free</b></span></div>` +
+                              `<div class="bar">${bar}</div>${legend}</div>`;
+                          }).join('');
+                        ]]]
+                    extra_styles: |
+                      .dk + .dk { margin-top: 22px; padding-top: 18px; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+                      .h { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+                      .n { font-size: 17px; font-weight: 600; }
+                      .n small { margin-left: 8px; font-size: 13px; font-weight: 400; color: rgba(255, 255, 255, 0.45); }
+                      .s { font-size: 14px; color: rgba(255, 255, 255, 0.6); white-space: nowrap; }
+                      .s b { font-weight: 500; color: rgba(255, 255, 255, 0.85); }
+                      .bar { display: flex; height: 10px; margin-top: 10px; border-radius: 5px; overflow: hidden; background: rgba(255, 255, 255, 0.08); }
+                      .bar i { height: 100%; }
+                      .lg { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px 18px; margin-top: 12px; font-size: 13.5px; }
+                      .lg span { display: flex; align-items: center; gap: 8px; color: rgba(255, 255, 255, 0.75); min-width: 0; }
+                      .lg b { flex: none; width: 10px; height: 10px; border-radius: 3px; }
+                      .lg em { margin-left: auto; font-style: normal; color: rgba(255, 255, 255, 0.5); font-variant-numeric: tabular-nums; }
+                  - type: custom:button-card
+                    template: desk_title_next
+                    name: CPU cores
+                  - type: custom:button-card
+                    template: desk_panel
+                    entity: sensor.server_cpu_nucleos
+                    custom_fields:
+                      c: |
+                        [[[
+                          const n = entity.attributes.nucleos || [];
+                          const bars = n.map((v, i) => `<div class="core"><div class="col"><i style="height:${Math.max(2, v).toFixed(0)}%"></i></div>` +
+                            `<span>${Math.round(v)}</span></div>`).join('');
+                          return `<div class="nm">${entity.attributes.nombre || ''}<span>${n.length} threads</span></div><div class="cores">${bars}</div>`;
+                        ]]]
+                    extra_styles: |
+                      .nm { display: flex; justify-content: space-between; font-size: 14px; color: rgba(255, 255, 255, 0.75); }
+                      .nm span { color: rgba(255, 255, 255, 0.45); }
+                      .cores { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
+                      .core { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+                      .col { position: relative; width: 100%; height: 80px; border-radius: 5px; background: rgba(255, 255, 255, 0.06); overflow: hidden; }
+                      .col i { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(255, 255, 255, 0.75); transition: height 0.4s; }
+                      .core span { font-size: 12px; color: rgba(255, 255, 255, 0.55); font-variant-numeric: tabular-nums; }
+              - type: vertical-stack
+                cards:
+                  - type: custom:button-card
+                    template: desk_title_next
+                    name: Processes
+                  - type: custom:button-card
+                    template: desk_panel
+                    entity: sensor.server_procesos
+                    custom_fields:
+                      c: |
+                        [[[
+                          const esc = (v) => String(v).replace(/[&<>"]/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+                          const ps = entity.attributes.procs || [];
+                          const top = Math.max(1, ...ps.map((p) => p.cpu));
+                          const mb = (b) => b >= 1073741824 ? `${(b / 1073741824).toFixed(1)} GB` : `${Math.round(b / 1048576)} MB`;
+                          return `<div class="row hd"><span>Process</span><span>CPU</span><span>Memory</span></div>` + ps.map((p) =>
+                            `<div class="row"><span class="pn">${esc(p.nombre)}${p.n > 1 ? `<small>×${p.n}</small>` : ''}</span>` +
+                            `<span class="cpu"><i style="width:${(p.cpu / top * 100).toFixed(0)}%"></i><em>${p.cpu} %</em></span>` +
+                            `<span class="mem">${mb(p.mem)}</span></div>`).join('');
+                        ]]]
+                    extra_styles: |
+                      .row { display: grid; grid-template-columns: minmax(0, 1fr) 150px 80px; gap: 14px; align-items: center; height: 38px; font-size: 15px; }
+                      .row + .row { border-top: 1px solid rgba(255, 255, 255, 0.06); }
+                      .hd { height: 26px; font-size: 13px; color: rgba(255, 255, 255, 0.45); }
+                      .pn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+                      .pn small { margin-left: 6px; color: rgba(255, 255, 255, 0.45); }
+                      .cpu { position: relative; height: 22px; border-radius: 5px; background: rgba(255, 255, 255, 0.05); overflow: hidden; }
+                      .cpu i { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(255, 255, 255, 0.16); }
+                      .cpu em { position: relative; padding-left: 8px; font-style: normal; font-size: 13.5px; line-height: 22px; font-variant-numeric: tabular-nums; }
+                      .mem { text-align: right; color: rgba(255, 255, 255, 0.7); font-variant-numeric: tabular-nums; }
+                  # The container HA runs in (System Monitor)
+                  - type: custom:button-card
+                    template: desk_title_next
+                    name: Home Assistant
+                  - type: custom:layout-card
+                    layout_type: custom:grid-layout
+                    layout: *tiles_layout
+                    cards:
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.system_monitor_processor_use
+                        name: CPU
+                        icon: mdi:cpu-64-bit
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.system_monitor_memory_usage
+                        name: Memory
+                        icon: mdi:memory
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.system_monitor_disk_usage
+                        name: Disk
+                        icon: mdi:harddisk
+                      - type: custom:button-card
+                        template: desk_uptime
+                        entity: sensor.system_monitor_uptime
+                        name: Uptime
+                        icon: mdi:home-assistant
+          - type: custom:button-card
+            template: desk_title_next
+            name: History
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout: *charts_layout
+            cards:
+              - type: history-graph
+                title: CPU and memory (24 h)
+                hours_to_show: 24
+                entities:
+                  - entity: sensor.host_docker_internal_cpu_usage
+                    name: CPU
+                  - entity: sensor.host_docker_internal_memory_usage
+                    name: Memory
+                  - entity: sensor.host_docker_internal_nvidia_geforce_rtx_2060_super_gpu_nvidia0_processor_usage
+                    name: GPU
+              - type: history-graph
+                title: Temperatures (24 h)
+                hours_to_show: 24
+                entities:
+                  - entity: sensor.host_docker_internal_package_id_0_temperature
+                    name: CPU
+                  - entity: sensor.host_docker_internal_nvidia_geforce_rtx_2060_super_gpu_nvidia0_temperature
+                    name: GPU
+                  - entity: sensor.host_docker_internal_composite_temperature
+                    name: NVMe
+              - type: history-graph
+                title: Network (24 h)
+                hours_to_show: 24
+                entities:
+                  - entity: sensor.host_docker_internal_wlxdc6279d174da_rx
+                    name: Wi-Fi down
+                  - entity: sensor.host_docker_internal_wlxdc6279d174da_tx
+                    name: Wi-Fi up
+                  - entity: sensor.host_docker_internal_tailscale0_rx
+                    name: Tailscale down
+              - type: history-graph
+                title: Power (24 h)
+                hours_to_show: 24
+                entities:
+                  - entity: sensor.bedroom_plug_server_power
+                    name: Server
+
+  - title: Network
+    path: network
+    type: custom:grid-layout
+    theme: MRTN Kiosk
+    layout: *layout
+    cards:
+      - *sidebar
+      - type: custom:layout-card
+        layout_type: custom:grid-layout
+        layout: *main_layout
+        view_layout:
+          grid-area: main
+        cards:
+          - type: custom:button-card
+            template: desk_tabs
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout: *columns_layout
+            cards:
+              - type: vertical-stack
+                cards:
+                  - type: custom:button-card
+                    template: desk_title
+                    name: AdGuard
+                  - type: custom:layout-card
+                    layout_type: custom:grid-layout
+                    layout: *stats_layout
+                    cards:
+                      - type: custom:button-card
+                        template: desk_stat
+                        entity: sensor.adguard_home_dns_queries
+                        name: DNS queries
+                        icon: mdi:dns
+                        variables: { zero: 1 }
+                      - type: custom:button-card
+                        template: desk_stat
+                        entity: sensor.adguard_home_dns_queries_blocked_ratio
+                        name: Blocked
+                        icon: mdi:shield-off
+                        variables: { zero: 1 }
+                  - type: custom:layout-card
+                    layout_type: custom:grid-layout
+                    layout:
+                      <<: *tiles_layout
+                      margin: 12px 0 0
+                    cards:
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: switch.adguard_home_protection
+                        name: Protection
+                        icon: mdi:shield-check
+                        tap_action: { action: toggle }
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: switch.adguard_home_filtering
+                        name: Filtering
+                        icon: mdi:filter
+                        tap_action: { action: toggle }
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: switch.adguard_home_safe_browsing
+                        name: Safe browsing
+                        icon: mdi:web-check
+                        tap_action: { action: toggle }
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: switch.adguard_home_safe_search
+                        name: Safe search
+                        icon: mdi:magnify-scan
+                        tap_action: { action: toggle }
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: switch.adguard_home_parental_control
+                        name: Parental control
+                        icon: mdi:account-child
+                        tap_action: { action: toggle }
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: switch.adguard_home_query_log
+                        name: Query log
+                        icon: mdi:format-list-bulleted
+                        tap_action: { action: toggle }
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.adguard_home_dns_queries_blocked
+                        name: Queries blocked
+                        icon: mdi:shield-off-outline
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.adguard_home_average_processing_speed
+                        name: Response time
+                        icon: mdi:speedometer
+              - type: vertical-stack
+                cards:
+                  - type: custom:button-card
+                    template: desk_title
+                    name: Router
+                  - type: custom:layout-card
+                    layout_type: custom:grid-layout
+                    layout: *stats_layout
+                    cards:
+                      - type: custom:button-card
+                        template: desk_stat
+                        entity: sensor.tp_link_router_cpu_used
+                        name: Router CPU
+                        icon: mdi:cpu-32-bit
+                        variables: { zero: 1 }
+                      - type: custom:button-card
+                        template: desk_stat
+                        entity: sensor.tp_link_router_total_clients
+                        name: Clients
+                        icon: mdi:devices
+                        variables: { zero: 1 }
+                  - type: custom:layout-card
+                    layout_type: custom:grid-layout
+                    layout:
+                      <<: *tiles_layout
+                      margin: 12px 0 0
+                    cards:
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.tp_link_router_total_main_wifi_clients
+                        name: Wi-Fi clients
+                        icon: mdi:wifi
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.tp_link_router_total_wired_clients
+                        name: Wired clients
+                        icon: mdi:ethernet
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.tp_link_router_total_guest_wifi_clients
+                        name: Guest clients
+                        icon: mdi:account-multiple-outline
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.tp_link_router_memory_used
+                        name: Router memory
+                        icon: mdi:memory
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.tp_link_router_dhcp_reservations
+                        name: DHCP reservations
+                        icon: mdi:ip-network
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.tp_link_router_wan_ipv4_address
+                        name: WAN
+                        icon: mdi:wan
+                      # Wi-Fi bands: shown, not switched (turning one off from here cuts the house).
+                      - type: custom:button-card
+                        template: desk_info
+                        entity: switch.tp_link_router_wifi_2_4g
+                        name: Wi-Fi 2.4 GHz
+                        icon: mdi:wifi
+                      - type: custom:button-card
+                        template: desk_info
+                        entity: switch.tp_link_router_wifi_5g
+                        name: Wi-Fi 5 GHz
+                        icon: mdi:wifi
+          # Every device_tracker, home first: new devices show up on their own.
+          - type: custom:button-card
+            template: desk_title_next
+            name: Devices
+          - type: custom:button-card
+            template: desk_panel
+            triggers_update: all
+            styles:
+              card:
+                - background: none
+                - padding: 0
+            custom_fields:
+              c: |
+                [[[
+                  const esc = (v) => String(v).replace(/[&<>"]/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+                  const icon = (n) => /tv/i.test(n) ? 'mdi:television' : /bulb/i.test(n) ? 'mdi:lightbulb' : /plug/i.test(n) ? 'mdi:power-socket-eu' :
+                    /a3|a5|galaxy|phone|martin/i.test(n) ? 'mdi:cellphone' : /router/i.test(n) ? 'mdi:router-wireless' :
+                    /server|desktop|pc/i.test(n) ? 'mdi:desktop-tower' : 'mdi:lan-connect';
+                  const devs = Object.values(states).filter((s) => s.entity_id.startsWith('device_tracker.'))
+                    .map((s) => ({ n: s.attributes.friendly_name || s.entity_id, home: s.state === 'home', id: s.entity_id }))
+                    .sort((a, b) => (b.home - a.home) || a.n.localeCompare(b.n));
+                  const open = (id) => `this.dispatchEvent(new CustomEvent('hass-more-info',{bubbles:true,composed:true,detail:{entityId:'${id}'}}))`;
+                  return `<div class="grid">` + devs.map((d) =>
+                    `<div class="dv ${d.home ? 'on' : ''}" onclick="event.stopPropagation();${open(d.id)}"><ha-icon icon="${icon(d.n)}"></ha-icon>` +
+                    `<div class="tx"><div class="dn">${esc(d.n)}</div><div class="ds">${d.home ? 'Connected' : 'Away'}</div></div></div>`).join('') + `</div>`;
+                ]]]
+            extra_styles: |
+              .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+              .dv { display: flex; align-items: center; justify-content: flex-start; gap: 12px; height: 58px; padding: 0 14px; border-radius: 10.4px; text-align: left;
+                background: rgba(0, 0, 0, 0.15); cursor: pointer; opacity: 0.5; }
+              .dv.on { opacity: 1; }
+              .dv:hover { background: rgba(255, 255, 255, 0.06); }
+              .dv ha-icon { --mdc-icon-size: 22px; width: 22px; height: 22px; flex: none; display: flex; color: rgba(255, 255, 255, 0.75); }
+              .dv.on ha-icon { color: rgb(130, 200, 150); }
+              .tx { flex: 1; min-width: 0; }
+              .dn { font-size: 15px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+              .ds { font-size: 13px; color: rgba(255, 255, 255, 0.55); }
+          - type: custom:button-card
+            template: desk_title_next
+            name: History
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout: *charts_layout
+            cards:
+              - type: history-graph
+                title: DNS queries (24 h)
+                hours_to_show: 24
+                entities:
+                  - entity: sensor.adguard_home_dns_queries
+                    name: Total
+                  - entity: sensor.adguard_home_dns_queries_blocked
+                    name: Blocked
+              - type: history-graph
+                title: Router (24 h)
+                hours_to_show: 24
+                entities:
+                  - entity: sensor.tp_link_router_cpu_used
+                    name: CPU
+                  - entity: sensor.tp_link_router_memory_used
+                    name: Memory
+              - type: history-graph
+                title: Clients (24 h)
+                hours_to_show: 24
+                entities:
+                  - entity: sensor.tp_link_router_total_clients
+                    name: Total
+                  - entity: sensor.tp_link_router_total_main_wifi_clients
+                    name: Wi-Fi
+          - type: custom:button-card
+            template: desk_title_next
+            name: AdGuard Home
+          # AdGuard's own web UI
+          - type: iframe
+            url: http://mrtn-server:3000
+            aspect_ratio: 56%
+            card_mod:
+              style: |
+                ha-card { overflow: hidden; }
+
+  - title: Weather
+    path: weather
+    type: custom:grid-layout
+    theme: MRTN Kiosk
+    layout: *layout
+    cards:
+      - *sidebar
+      - type: custom:layout-card
+        layout_type: custom:grid-layout
+        layout: *main_layout
+        view_layout:
+          grid-area: main
+        cards:
+          - type: custom:button-card
+            template: desk_tabs
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout: *columns_layout
+            cards:
+              - type: vertical-stack
+                cards:
+                  - type: custom:button-card
+                    template: desk_title
+                    name: Now
+                  - type: custom:weather-forecast-card
+                    entity: weather.clima
+                    show_condition_effects: true
+                    default_forecast: hourly
+                    forecast:
+                      mode: chart
+                      extra_attribute: precipitation_probability
+                      show_attribute_selector: true
+                  - type: custom:button-card
+                    template: desk_title_next
+                    name: Week
+                  - type: custom:weather-forecast-card
+                    entity: weather.clima
+                    show_current: false
+                    forecast_types: daily
+                    forecast:
+                      extra_attribute: precipitation_probability
+              - type: vertical-stack
+                cards:
+                  - type: custom:button-card
+                    template: desk_title
+                    name: Conditions
+                  - type: custom:layout-card
+                    layout_type: custom:grid-layout
+                    layout: *stats_layout
+                    cards:
+                      - type: custom:button-card
+                        template: desk_stat
+                        entity: sensor.clima_temperatura
+                        name: Temperature
+                        icon: mdi:thermometer
+                      - type: custom:button-card
+                        template: desk_stat
+                        entity: sensor.clima_humedad
+                        name: Humidity
+                        icon: mdi:water-percent
+                  - type: custom:layout-card
+                    layout_type: custom:grid-layout
+                    layout:
+                      <<: *tiles_layout
+                      margin: 12px 0 0
+                    cards:
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.clima_sensacion_termica
+                        name: Feels like
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.clima_viento
+                        name: Wind
+                        state_display: |
+                          [[[
+                            const b = Number((states['sensor.clima_direccion_del_viento'] || {}).state);
+                            const dir = isNaN(b) ? '' : ' ' + ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(b / 45) % 8];
+                            return `${Math.round(Number(entity.state))} km/h${dir}`;
+                          ]]]
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.clima_rafagas
+                        name: Gusts
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.clima_precipitacion
+                        name: Precipitation
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.clima_nubosidad
+                        name: Cloud cover
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.clima_indice_uv
+                        name: UV index
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.clima_visibilidad
+                        name: Visibility
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.clima_punto_de_rocio
+                        name: Dew point
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.clima_presion
+                        name: Pressure
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.clima_calidad_del_aire
+                        name: Air quality
+                        icon: mdi:air-filter
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.clima_pm2_5
+                        name: PM2.5
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.clima_pm10
+                        name: PM10
+          - type: custom:button-card
+            template: desk_title_next
+            name: Radar & wind
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout:
+              <<: *charts_layout
+              grid-template-columns: repeat(auto-fill, minmax(520px, 1fr))
+            cards:
+              - type: custom:windy-card
+                location: zone.home
+                overlay: radar
+                zoom: 7
+                height: 460
+                metric_wind: km/h
+                show_marker: true
+                hide_message: true
+              - type: custom:windy-card
+                location: zone.home
+                overlay: wind
+                zoom: 7
+                height: 460
+                metric_wind: km/h
+                show_marker: true
+                hide_message: true
+                show_pressure: true
+          - type: custom:button-card
+            template: desk_title_next
+            name: Trends
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout: *charts_layout
+            cards:
+              - type: history-graph
+                title: Temperature (48 h)
+                hours_to_show: 48
+                entities:
+                  - entity: sensor.clima_temperatura
+                    name: Outside
+                  - entity: sensor.clima_sensacion_termica
+                    name: Feels like
+              - type: history-graph
+                title: Pressure (48 h)
+                hours_to_show: 48
+                entities:
+                  - entity: sensor.clima_presion
+                    name: Sea level
+              - type: history-graph
+                title: Wind (48 h)
+                hours_to_show: 48
+                entities:
+                  - entity: sensor.clima_viento
+                    name: Wind
+                  - entity: sensor.clima_rafagas
+                    name: Gusts
+
+  - title: Traffic
+    path: traffic
+    type: custom:grid-layout
+    theme: MRTN Kiosk
+    layout: *layout
+    cards:
+      - *sidebar
+      - type: custom:layout-card
+        layout_type: custom:grid-layout
+        layout: *main_layout
+        view_layout:
+          grid-area: main
+        cards:
+          - type: custom:button-card
+            template: desk_tabs
+          - type: custom:button-card
+            template: desk_title
+            name: Route
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout: *stats_layout
+            cards:
+              - type: custom:button-card
+                template: desk_stat
+                entity: sensor.ruta_tiempo
+                name: Travel time
+                icon: mdi:motorbike
+              - type: custom:button-card
+                template: desk_stat
+                entity: sensor.ruta_demora
+                name: Traffic delay
+                icon: mdi:car-brake-alert
+                variables: { zero: 1 }
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout:
+              <<: *tiles_layout
+              margin: 12px 0 0
+            cards:
+              - type: custom:button-card
+                template: desk_tile
+                entity: sensor.ruta_distancia
+                name: Distance
+                icon: mdi:map-marker-distance
+              - type: custom:button-card
+                template: desk_tile
+                entity: sensor.ruta_en_moto
+                name: Ride
+                state_display: |
+                  [[[ return entity.attributes.motivo ? `${entity.state} · ${entity.attributes.motivo}` : entity.state; ]]]
+              - type: custom:button-card
+                template: desk_tile
+                entity: input_text.ruta_destino
+                name: Swap route
+                icon: mdi:swap-horizontal
+                state_display: |
+                  [[[ return `to ${entity.state ? entity.state.split(',')[0] : '-'}`; ]]]
+                tap_action:
+                  action: javascript
+                  javascript: |
+                    [[[
+                      const o = states['input_text.ruta_origen'].state;
+                      const d = states['input_text.ruta_destino'].state;
+                      hass.callService('input_text', 'set_value', {entity_id: 'input_text.ruta_origen', value: d});
+                      hass.callService('input_text', 'set_value', {entity_id: 'input_text.ruta_destino', value: o});
+                    ]]]
+              - type: custom:button-card
+                template: desk_tile
+                entity: sensor.clima_precipitacion
+                name: Rain now
+                icon: mdi:weather-pouring
+              - type: custom:button-card
+                template: desk_tile
+                entity: sensor.clima_rafagas
+                name: Gusts
+                icon: mdi:weather-windy-variant
+              - type: custom:button-card
+                template: desk_time
+                entity: sensor.sun_next_setting
+                name: Sunset
+                icon: mdi:weather-sunset-down
+          # Origin / destination, where they landed, and the trip in Google Maps / Waze.
+          - type: custom:button-card
+            template: desk_panel
+            entity: input_text.ruta_destino
+            triggers_update: [input_text.ruta_origen, sensor.ruta_origen, sensor.ruta_destino]
+            styles:
+              card:
+                - margin-top: 12px
+            custom_fields:
+              c: |
+                [[[
+                  const esc = (v) => String(v || '').replace(/[&<>"]/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+                  const o = states['input_text.ruta_origen'].state, d = entity.state;
+                  const ll = ((states['sensor.ruta_destino'] || {}).state || '').split(',');
+                  const geo = (id) => esc(((states[id] || {}).attributes || {}).display_name || 'address not found');
+                  const gm = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(o)}&destination=${encodeURIComponent(d)}&travelmode=driving`;
+                  const wz = ll.length === 2 ? `https://www.waze.com/ul?ll=${ll[0]}%2C${ll[1]}&navigate=yes` : '';
+                  const edit = (id) => `event.stopPropagation();this.dispatchEvent(new CustomEvent('hass-more-info',{bubbles:true,composed:true,detail:{entityId:'${id}'}}))`;
+                  return `<div class="rt"><div class="pt" onclick="${edit('input_text.ruta_origen')}"><span class="k">From</span><span class="a">${esc(o)}</span><span class="g">${geo('sensor.ruta_origen')}</span></div>` +
+                    `<ha-icon icon="mdi:arrow-right"></ha-icon>` +
+                    `<div class="pt" onclick="${edit('input_text.ruta_destino')}"><span class="k">To</span><span class="a">${esc(d)}</span><span class="g">${geo('sensor.ruta_destino')}</span></div>` +
+                    `<div class="ln"><a href="${gm}" target="_blank" rel="noreferrer">Google Maps</a>${wz ? `<a href="${wz}" target="_blank" rel="noreferrer">Waze</a>` : ''}</div></div>`;
+                ]]]
+            extra_styles: |
+              .rt { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto; gap: 18px; align-items: center; }
+              .pt { display: flex; flex-direction: column; gap: 3px; min-width: 0; cursor: pointer; padding: 6px 10px; margin: -6px -10px; border-radius: 8px; }
+              .pt:hover { background: rgba(255, 255, 255, 0.05); }
+              .k { font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(255, 255, 255, 0.45); }
+              .a { font-size: 16px; font-weight: 600; }
+              .g { font-size: 13px; color: rgba(255, 255, 255, 0.5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+              .rt > ha-icon { --mdc-icon-size: 24px; width: 24px; height: 24px; display: flex; color: rgba(255, 255, 255, 0.4); }
+              .ln { display: flex; gap: 10px; }
+              .ln a { padding: 9px 14px; border-radius: 8px; background: rgba(255, 255, 255, 0.08); color: #fff; text-decoration: none; font-size: 14px; font-weight: 500; white-space: nowrap; }
+              .ln a:hover { background: rgba(255, 255, 255, 0.16); }
+              @media (max-width: 1300px) { .rt { grid-template-columns: minmax(0, 1fr); } .rt > ha-icon { display: none; } }
+          - type: custom:button-card
+            template: desk_title_next
+            name: Live map
+          - type: iframe
+            url: https://embed.waze.com/iframe?zoom=12&lat=-34.59&lon=-58.54&ct=livemap
+            aspect_ratio: 50%
+            card_mod:
+              style: |
+                ha-card { overflow: hidden; }
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout:
+              <<: *charts_layout
+              grid-template-columns: repeat(auto-fill, minmax(520px, 1fr))
+              margin: 12px 0 0
+            cards:
+              - type: iframe
+                url: https://embed.waze.com/iframe?zoom=14&lat=-34.59&lon=-58.54&ct=livemap
+                aspect_ratio: 70%
+                card_mod:
+                  style: |
+                    ha-card { overflow: hidden; }
+              - type: iframe
+                url: https://embed.waze.com/iframe?zoom=12&lat=-34.6037&lon=-58.3816&ct=livemap
+                aspect_ratio: 70%
+                card_mod:
+                  style: |
+                    ha-card { overflow: hidden; }
+
+  - title: Energy
+    path: energy
+    type: custom:grid-layout
+    theme: MRTN Kiosk
+    layout: *layout
+    cards:
+      - *sidebar
+      - type: custom:layout-card
+        layout_type: custom:grid-layout
+        layout: *main_layout
+        view_layout:
+          grid-area: main
+        cards:
+          - type: custom:button-card
+            template: desk_tabs
+          # Read-only: power and cost sensors, no plug switches.
+          - type: custom:button-card
+            template: desk_title
+            name: Now
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout: *stats_layout
+            cards:
+              - type: custom:button-card
+                template: desk_stat
+                entity: sensor.bedroom_plug_server_power
+                name: Server
+                icon: mdi:server
+                tap_action: { action: none }
+                hold_action: { action: none }
+                variables: { zero: 1 }
+              - type: custom:button-card
+                template: desk_stat
+                entity: sensor.enchufe_inteligente_4_power
+                name: PC
+                icon: mdi:desktop-tower
+                tap_action: { action: none }
+                hold_action: { action: none }
+                variables: { zero: 1 }
+              - type: custom:button-card
+                template: desk_stat
+                entity: sensor.bedroom_plug_ac_power
+                name: AC
+                icon: mdi:air-conditioner
+                tap_action: { action: none }
+                hold_action: { action: none }
+                variables: { zero: 1 }
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout: *columns_layout
+            cards:
+              - type: vertical-stack
+                cards:
+                  - type: custom:button-card
+                    template: desk_title_next
+                    name: Today
+                  - type: custom:layout-card
+                    layout_type: custom:grid-layout
+                    layout: *tiles_layout
+                    cards:
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.server_energia_hoy
+                        name: Server
+                        icon: mdi:server
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.server_costo_hoy
+                        name: Server cost
+                        icon: mdi:cash
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.server_horas_hoy
+                        name: Server on
+                        icon: mdi:clock-outline
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.server_costo_por_hora
+                        name: Server per hour
+                        icon: mdi:cash-clock
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.ac_energia_hoy
+                        name: AC
+                        icon: mdi:air-conditioner
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.ac_costo_hoy
+                        name: AC cost
+                        icon: mdi:cash
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.ac_horas_hoy
+                        name: AC on
+                        icon: mdi:clock-outline
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.ac_costo_por_hora
+                        name: AC per hour
+                        icon: mdi:cash-clock
+                  - type: custom:button-card
+                    template: desk_title_next
+                    name: Server breakdown
+                  - type: custom:layout-card
+                    layout_type: custom:grid-layout
+                    layout: *tiles_layout
+                    cards:
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.server_cpu_potencia
+                        name: CPU
+                        icon: mdi:cpu-64-bit
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.server_gpu_potencia
+                        name: GPU
+                        icon: mdi:expansion-card
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.server_resto_potencia
+                        name: Rest
+                        icon: mdi:power-plug
+              - type: vertical-stack
+                cards:
+                  - type: custom:button-card
+                    template: desk_title_next
+                    name: Month
+                  - type: custom:layout-card
+                    layout_type: custom:grid-layout
+                    layout: *tiles_layout
+                    cards:
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.server_costo_mes
+                        name: Server
+                        icon: mdi:server
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.server_proyeccion_mes
+                        name: Server forecast
+                        icon: mdi:chart-line
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.pc_main_costo_mes
+                        name: PC
+                        icon: mdi:desktop-tower
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.pc_main_proyeccion_mes
+                        name: PC forecast
+                        icon: mdi:chart-line
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.ac_costo_mes
+                        name: AC
+                        icon: mdi:air-conditioner
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.ac_proyeccion_mes
+                        name: AC forecast
+                        icon: mdi:chart-line
+                  - type: custom:button-card
+                    template: desk_title_next
+                    name: Tariff
+                  - type: custom:layout-card
+                    layout_type: custom:grid-layout
+                    layout: *tiles_layout
+                    cards:
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: input_number.tarifa_precio_kwh
+                        name: Price per kWh
+                        icon: mdi:cash
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: input_number.tarifa_impuestos_pct
+                        name: Taxes
+                        icon: mdi:percent
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.tarifa_precio_final
+                        name: Final price
+                        icon: mdi:cash-check
+          - type: custom:button-card
+            template: desk_title_next
+            name: History
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout: *charts_layout
+            cards:
+              - type: statistics-graph
+                title: Power (24 h)
+                chart_type: line
+                period: 5minute
+                days_to_show: 1
+                stat_types:
+                  - mean
+                entities:
+                  - entity: sensor.bedroom_plug_server_power
+                    name: Server
+                  - entity: sensor.enchufe_inteligente_4_power
+                    name: PC
+                  - entity: sensor.bedroom_plug_ac_power
+                    name: AC
+              - type: statistics-graph
+                title: Energy per day (30 d)
+                chart_type: bar
+                period: day
+                days_to_show: 30
+                stat_types:
+                  - change
+                entities:
+                  - entity: sensor.server_energia
+                    name: Server
+                  - entity: sensor.pc_main_energia
+                    name: PC
+                  - entity: sensor.ac_energia
+                    name: AC
+              - type: statistics-graph
+                title: Energy per month
+                chart_type: bar
+                period: month
+                days_to_show: 365
+                stat_types:
+                  - change
+                entities:
+                  - entity: sensor.server_energia
+                    name: Server
+                  - entity: sensor.pc_main_energia
+                    name: PC
+                  - entity: sensor.ac_energia
+                    name: AC
+
+  - title: Lights
+    path: lights
+    type: custom:grid-layout
+    theme: MRTN Kiosk
+    layout: *layout
+    cards:
+      - *sidebar
+      - type: custom:layout-card
+        layout_type: custom:grid-layout
+        layout: *main_layout
+        view_layout:
+          grid-area: main
+        cards:
+          - type: custom:button-card
+            template: desk_tabs
+          - type: custom:button-card
+            template: desk_title
+            name: Room
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout:
+              <<: *tiles_layout
+              grid-template-columns: repeat(auto-fill, minmax(380px, 1fr))
+            cards:
+              - type: custom:button-card
+                template: desk_slider
+                entity: light.room
+                name: All
+              - type: custom:button-card
+                template: desk_slider
+                entity: light.cla60_smart_wifi
+                name: Bulb 1
+              - type: custom:button-card
+                template: desk_slider
+                entity: light.cla60_smart_wifi_2
+                name: Bulb 2
+              - type: custom:button-card
+                template: desk_slider
+                entity: light.cla60_smart_wifi_3
+                name: Bulb 3
+          - type: custom:button-card
+            template: desk_title_next
+            name: At night
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout: *tiles_layout
+            cards:
+              - type: custom:button-card
+                template: desk_tile
+                entity: input_datetime.luces_atenuar_hora
+                name: Dim from
+              - type: custom:button-card
+                template: desk_tile
+                entity: input_number.luces_atenuar_brillo
+                name: Dim to
+              - type: custom:button-card
+                template: desk_tile
+                entity: input_datetime.luces_apagar_hora
+                name: Off at
+              # Lights with the "Auto lights" label (the ones these automations control).
+              - type: custom:button-card
+                template: desk_tile
+                name: Auto lights
+                icon: mdi:lightbulb-auto
+                show_state: false
+                tap_action: { action: none }
+                triggers_update: all
+                custom_fields:
+                  s: |
+                    [[[
+                      const n = Object.values(hass.entities || {})
+                        .filter((e) => e.entity_id.startsWith('light.') && (e.labels || []).includes('auto_lights')).length;
+                      return `${n} light${n === 1 ? '' : 's'}`;
+                    ]]]
+                styles:
+                  custom_fields:
+                    s:
+                      - justify-self: start
+                      - align-self: start
+                      - padding-right: 14px
+                      - font-size: 15.5px
+                      - line-height: 20px
+                      - color: rgba(255, 255, 255, 0.7)
+          - type: custom:button-card
+            template: desk_title_next
+            name: History
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout: *charts_layout
+            cards:
+              - type: history-graph
+                title: Lights (48 h)
+                hours_to_show: 48
+                entities:
+                  - entity: light.cla60_smart_wifi
+                    name: Bulb 1
+                  - entity: light.cla60_smart_wifi_2
+                    name: Bulb 2
+                  - entity: light.cla60_smart_wifi_3
+                    name: Bulb 3
+
+  # Settings of the kiosk/light automations (packages/kiosk.yaml) and an on/off
+  # list of every automation in HA.
+  - title: Automations
+    path: automations
+    type: custom:grid-layout
+    theme: MRTN Kiosk
+    layout: *layout
+    cards:
+      - *sidebar
+      - type: custom:layout-card
+        layout_type: custom:grid-layout
+        layout: *main_layout
+        view_layout:
+          grid-area: main
+        cards:
+          - type: custom:button-card
+            template: desk_tabs
+          - type: custom:button-card
+            template: desk_title
+            name: Kiosk
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout: *tiles_layout
+            cards:
+              - type: custom:button-card
+                template: desk_tile
+                entity: input_datetime.kiosk_noche_inicio
+                name: Night from
+              - type: custom:button-card
+                template: desk_tile
+                entity: input_number.kiosk_brillo_noche
+                name: Night brightness
+              - type: custom:button-card
+                template: desk_tile
+                entity: input_datetime.kiosk_dia_inicio
+                name: Day from
+              - type: custom:button-card
+                template: desk_tile
+                entity: input_number.kiosk_brillo_dia
+                name: Day brightness
+              - type: custom:button-card
+                template: desk_tile
+                entity: input_number.kiosk_inactividad_min
+                name: Back to Overview
+              - type: custom:button-card
+                template: desk_slider
+                entity: light.touchkio_mrtn_hub_display
+                name: Kiosk screen
+                tap_action: { action: none }
+                view_layout:
+                  grid-column: span 2
+          - type: custom:button-card
+            template: desk_title_next
+            name: Automations
+          # Every automation in HA, built at render time: new ones show up on their own.
+          # Click to enable/disable.
+          - type: custom:button-card
+            template: desk_panel
+            triggers_update: all
+            styles:
+              card:
+                - background: none
+                - padding: 0
+            custom_fields:
+              c: |
+                [[[
+                  const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+                  const ago = (t) => {
+                    if (!t) return 'never ran';
+                    const m = Math.floor((Date.now() - new Date(t).getTime()) / 6e4);
+                    if (m < 1) return 'ran just now';
+                    if (m < 60) return `ran ${m} min ago`;
+                    if (m < 1440) return `ran ${Math.floor(m / 60)} h ago`;
+                    return `ran ${Math.floor(m / 1440)} d ago`;
+                  };
+                  const autos = Object.values(states)
+                    .filter((a) => a.entity_id.startsWith('automation.'))
+                    .sort((a, b) => (a.attributes.friendly_name || '').localeCompare(b.attributes.friendly_name || ''));
+                  const call = (id) => `(this.getRootNode().host.hass||document.querySelector('home-assistant').hass)` +
+                    `.callService('automation','toggle',{entity_id:'${id}'})`;
+                  return '<div class="grid">' + autos.map((a) => {
+                    const on = a.state === 'on';
+                    return `<div class="t ${on ? 'on' : ''}" onclick="event.stopPropagation();${call(a.entity_id)}">` +
+                      `<div class="i"><ha-icon icon="${on ? 'mdi:robot' : 'mdi:robot-off-outline'}"></ha-icon></div>` +
+                      `<div class="r"><div class="n">${esc(a.attributes.friendly_name || a.entity_id)}</div>` +
+                      `<div class="s">${on ? 'on' : 'off'} · ${ago(a.attributes.last_triggered)}</div></div></div>`;
+                  }).join('') + '</div>';
+                ]]]
+            extra_styles: |
+              .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; }
+              .t { display: flex; align-items: center; height: 76px; border-radius: 10.4px; background: rgba(0, 0, 0, 0.15);
+                cursor: pointer; user-select: none; opacity: 0.55; }
+              .t.on { opacity: 1; }
+              .t:hover { background: rgba(255, 255, 255, 0.06); }
+              .i { flex: 0 0 76px; display: flex; align-items: center; justify-content: center; }
+              .i ha-icon { --mdc-icon-size: 26px; display: flex; align-items: center; justify-content: center;
+                width: 46px; height: 46px; border-radius: 50%; color: #fff; }
+              .t.on .i ha-icon { background: rgb(131, 129, 124); }
+              .r { min-width: 0; padding-right: 14px; text-align: left; }
+              .n { font-size: 17px; font-weight: 500; line-height: 21px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+              .s { font-size: 15px; line-height: 20px; color: rgba(255, 255, 255, 0.7); }
+
+  # Opened from Martin on Overview. Not in the tab bar; any tab takes you back.
+  - title: Map
+    path: map
+    subview: true
+    type: custom:grid-layout
+    theme: MRTN Kiosk
+    layout: *layout
+    cards:
+      - *sidebar
+      - type: custom:layout-card
+        layout_type: custom:grid-layout
+        layout: *main_layout
+        view_layout:
+          grid-area: main
+        cards:
+          - type: custom:button-card
+            template: desk_tabs
+          - type: custom:button-card
+            template: desk_title
+            entity: device_tracker.a35_martin
+            name: |
+              [[[
+                const z = {home: 'Home', not_home: 'Away'};
+                const b = states['sensor.a35_martin_battery_level'];
+                return `Martin · ${z[entity.state] || entity.state}` + (b ? ` · ${b.state} %` : '');
+              ]]]
+          # MapTiler streets-v2-dark like ha-fusion (/local/kiosk/map.html, see kiosk/map.html).
+          - type: custom:button-card
+            entity: device_tracker.a35_martin
+            show_icon: false
+            show_name: false
+            show_state: false
+            tap_action: { action: none }
+            custom_fields:
+              map: |
+                [[[
+                  const a = entity.attributes, h = (states['zone.home'] || {}).attributes || {};
+                  const qs = new URLSearchParams({
+                    lat: a.latitude ?? '', lon: a.longitude ?? '', acc: a.gps_accuracy ?? '',
+                    hlat: h.latitude ?? '', hlon: h.longitude ?? '', label: 'M',
+                  });
+                  return `<iframe src="/local/kiosk/map.html?${qs}" loading="lazy"></iframe>`;
+                ]]]
+            styles:
+              card:
+                - padding: 0
+                - overflow: hidden
+                - height: calc(100vh - 220px)
+                - min-height: 360px
+              grid:
+                - grid-template-areas: '"map"'
+                - height: 100%
+              custom_fields:
+                map:
+                  - height: 100%
+                  - pointer-events: auto
+            extra_styles: |
+              iframe { display: block; width: 100%; height: 100%; border: 0; }
+
+  # Opened from the Sun tile on Overview and the sun row in the sidebar.
+  - title: Sun
+    path: sun
+    subview: true
+    type: custom:grid-layout
+    theme: MRTN Kiosk
+    layout: *layout
+    cards:
+      - *sidebar
+      - type: custom:layout-card
+        layout_type: custom:grid-layout
+        layout: *main_layout
+        view_layout:
+          grid-area: main
+        cards:
+          - type: custom:button-card
+            template: desk_tabs
+          - type: custom:button-card
+            template: desk_title
+            entity: sun.sun
+            name: |
+              [[[ return `Sun · ${{above_horizon: 'Above horizon', below_horizon: 'Below horizon'}[entity.state] || entity.state}`; ]]]
+          # Day arc: sunrise on the left, sunset on the right, the sun at its
+          # current spot. At night it shows the next sunrise instead.
+          - type: custom:button-card
+            entity: sun.sun
+            show_icon: false
+            show_name: false
+            show_state: false
+            tap_action: { action: none }
+            triggers_update: all
+            custom_fields:
+              arc: |
+                [[[
+                  const t = (id) => new Date((states[id] || {}).state).getTime();
+                  const now = Date.now(), day = 864e5;
+                  const nextRise = t('sensor.sun_next_rising'), nextSet = t('sensor.sun_next_setting');
+                  const up = entity.state === 'above_horizon';
+                  const rise = up ? nextRise - day : nextRise;
+                  const set = nextSet;
+                  const hm = (ms) => isNaN(ms) ? '--:--' : new Date(ms).toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'});
+                  const W = 800, H = 260, cx = 400, by = 220, rx = 340, ry = 180;
+                  const pt = (f) => [cx - rx * Math.cos(Math.PI * f), by - ry * Math.sin(Math.PI * f)];
+                  const path = (f0, f1) => {
+                    let d = '';
+                    for (let i = 0; i <= 80; i++) {
+                      const [x, y] = pt(f0 + (f1 - f0) * i / 80);
+                      d += `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`;
+                    }
+                    return d;
+                  };
+                  const f = up ? Math.min(1, Math.max(0, (now - rise) / (set - rise))) : null;
+                  const elev = entity.attributes.elevation;
+                  let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%">` +
+                    `<line x1="20" y1="${by}" x2="${W - 20}" y2="${by}" stroke="rgba(255,255,255,0.25)" stroke-width="1"/>` +
+                    `<path d="${path(0, 1)}" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="2" stroke-dasharray="4 6"/>`;
+                  if (up) {
+                    const [sx, sy] = pt(f);
+                    svg += `<path d="${path(0, f)}" fill="none" stroke="rgb(242,196,107)" stroke-width="3"/>` +
+                      `<circle cx="${sx}" cy="${sy}" r="20" fill="rgba(242,196,107,0.25)"/>` +
+                      `<circle cx="${sx}" cy="${sy}" r="11" fill="rgb(242,196,107)"/>`;
+                  }
+                  svg += `<text x="${cx - rx}" y="${by + 28}" text-anchor="middle">${hm(rise)}</text>` +
+                    `<text x="${cx + rx}" y="${by + 28}" text-anchor="middle">${hm(set)}</text>` +
+                    `<text x="${cx}" y="${by - 50}" text-anchor="middle" class="big">` +
+                    (up ? `${elev !== undefined ? Math.round(elev) + '° high' : ''}` : `Sunrise ${hm(nextRise)}`) + `</text></svg>`;
+                  return svg;
+                ]]]
+            styles:
+              card:
+                - padding: 16px 20px 10px
+              grid:
+                - grid-template-areas: '"arc"'
+              custom_fields:
+                arc:
+                  - justify-self: stretch
+                  - max-width: 900px
+                  - margin: 0 auto
+                  - width: 100%
+            extra_styles: |
+              svg text { fill: rgba(255, 255, 255, 0.7); font: 500 17px "Inter Variable", system-ui; }
+              svg text.big { fill: rgba(255, 255, 255, 0.9); font-size: 30px; font-weight: 600; }
+          - type: custom:layout-card
+            layout_type: custom:grid-layout
+            layout:
+              <<: *tiles_layout
+              margin: 12px 0 0
+            cards:
+              - type: custom:button-card
+                template: desk_time
+                entity: sensor.sun_next_dawn
+                name: Dawn
+                icon: mdi:weather-sunset-up
+              - type: custom:button-card
+                template: desk_time
+                entity: sensor.sun_next_rising
+                name: Sunrise
+                icon: mdi:weather-sunset-up
+              - type: custom:button-card
+                template: desk_time
+                entity: sensor.sun_next_noon
+                name: Noon
+                icon: mdi:white-balance-sunny
+              - type: custom:button-card
+                template: desk_time
+                entity: sensor.sun_next_setting
+                name: Sunset
+                icon: mdi:weather-sunset-down
+              - type: custom:button-card
+                template: desk_time
+                entity: sensor.sun_next_dusk
+                name: Dusk
+                icon: mdi:weather-sunset-down
+              - type: custom:button-card
+                template: desk_tile
+                entity: sun.sun
+                name: Elevation
+                icon: mdi:angle-acute
+                state_display: |
+                  [[[ const e = entity.attributes.elevation; return e === undefined ? '-' : `${Math.round(e * 10) / 10}°`; ]]]

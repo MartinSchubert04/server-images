@@ -12,7 +12,11 @@ shows as a flicker on the Pi. So this merges every view into ONE view
   - `navigate` tap actions that point at a page become hash changes.
 
 Usage (inside the homeassistant container):
-    python3 build_dashboard.py dashboard.yaml out.json
+    python3 build_dashboard.py dashboard.yaml out.json [base.yaml]
+
+With base.yaml (the desktop Home uses the kiosk's dashboard.yaml), its
+button_card_templates are added first, so the source can reuse them and
+override any of them by name.
 """
 
 import copy
@@ -22,10 +26,14 @@ import sys
 import yaml
 
 
+# Tab bar templates: the kiosk's and the desktop Home's (home.yaml).
+TABS = ("fusion_tabs", "desk_tabs")
+
+
 def page_of(view):
     """Return (sidebar, main_layout_card, content_cards) of a per-tab view."""
     sidebar, main = view["cards"][0], view["cards"][1]
-    content = [c for c in main["cards"] if c.get("template") != "fusion_tabs"]
+    content = [c for c in main["cards"] if c.get("template") not in TABS]
     return sidebar, main, content
 
 
@@ -57,7 +65,7 @@ def build(src):
 
     first = views[0]
     sidebar, main, _ = page_of(first)
-    tabs = next(c for c in main["cards"] if c.get("template") == "fusion_tabs")
+    tabs = next(c for c in main["cards"] if c.get("template") in TABS)
 
     page_cards = []
     for view in views:
@@ -107,6 +115,10 @@ def build(src):
 if __name__ == "__main__":
     with open(sys.argv[1], encoding="utf-8") as f:
         source = yaml.safe_load(f)
+    if len(sys.argv) > 3:
+        with open(sys.argv[3], encoding="utf-8") as f:
+            base = yaml.safe_load(f).get("button_card_templates", {})
+        source["button_card_templates"] = {**base, **source.get("button_card_templates", {})}
     result = build(source)
     with open(sys.argv[2], "w", encoding="utf-8") as f:
         json.dump(result, f, separators=(",", ":"))
