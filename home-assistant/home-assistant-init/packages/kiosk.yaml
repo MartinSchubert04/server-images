@@ -234,7 +234,10 @@ automation:
               - condition: trigger
                 id: sin_uso
               - condition: template
-                value_template: "{{ not atenuado and is_state(pantalla, 'on') }}"
+                # Si se apaga antes o a la vez que se atenúa, no atenuar: subirle el brillo la prende
+                value_template: >-
+                  {% set apagar = states('input_number.kiosk_apagar_min') | int(0) %}
+                  {{ not atenuado and is_state(pantalla, 'on') and not (0 < apagar <= states('input_number.kiosk_atenuar_min') | int(5)) }}
             sequence:
               - service: input_number.set_value
                 target:
