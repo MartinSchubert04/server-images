@@ -2528,6 +2528,15 @@ views:
                 template: [fusion_tile, setting_popup]
                 entity: input_number.kiosk_inactividad_min
                 name: Back to Overview
+              # Right column, under Back to Overview (0 = never)
+              - type: custom:button-card
+                template: [fusion_tile, setting_popup]
+                entity: input_number.kiosk_apagar_min
+                name: Screen off after
+                state_display: |
+                  [[[ return Number(entity.state) ? `${entity.state} min` : 'Never'; ]]]
+                view_layout:
+                  grid-column: 2
           - type: custom:button-card
             template: fusion_title_next
             name: Lights

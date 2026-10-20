@@ -2359,6 +2359,12 @@ views:
                 entity: input_number.kiosk_inactividad_min
                 name: Back to Overview
               - type: custom:button-card
+                template: [desk_tile, setting_popup]
+                entity: input_number.kiosk_apagar_min
+                name: Screen off after
+                state_display: |
+                  [[[ return Number(entity.state) ? `${entity.state} min` : 'Never'; ]]]
+              - type: custom:button-card
                 template: desk_slider
                 entity: light.touchkio_mrtn_hub_display
                 name: Kiosk screen

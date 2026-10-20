@@ -54,6 +54,15 @@ input_number:
     step: 1
     unit_of_measurement: "min"
     mode: slider
+  # Pantalla sin toques: tras kiosk_apagar_min se apaga (0 = nunca); al tocarla vuelve.
+  kiosk_apagar_min:
+    name: "Kiosco: apagar pantalla tras"
+    icon: mdi:monitor-off
+    min: 0
+    max: 120
+    step: 5
+    unit_of_measurement: "min"
+    mode: slider
   # Pantalla sin toques: tras kiosk_atenuar_min baja a kiosk_brillo_atenuado, o de noche
   # (de kiosk_noche_inicio a kiosk_dia_inicio) a kiosk_brillo_atenuado_noche. Al tocarla vuelve.
   kiosk_atenuar_min:
@@ -124,6 +133,10 @@ input_boolean:
   kiosk_atenuado:
     name: "Kiosco: pantalla atenuada"
     icon: mdi:brightness-5
+  # Encendido mientras la pantalla está apagada por falta de uso (lo maneja kiosk_apagar_pantalla).
+  kiosk_apagado:
+    name: "Kiosco: pantalla apagada"
+    icon: mdi:monitor-off
 
 input_select:
   kiosk_haze:
@@ -279,6 +292,61 @@ automation:
                   entity_id: "{{ pantalla }}"
                 data:
                   brightness_pct: "{{ brillo_hora }}"
+
+  # Apaga la pantalla del kiosco tras kiosk_apagar_min sin toques (0 = nunca) y la prende al tocarla.
+  # Si estaba atenuada, al tocarla la vuelve a prender kiosk_brillo_nocturno con el brillo guardado;
+  # si no, se prende acá con el brillo que tenía. kiosk_apagado marca que la apagó esta automatización,
+  # así no prende una pantalla que se apagó a mano.
+  - id: kiosk_apagar_pantalla
+    alias: "Kiosco: apagar pantalla sin uso"
+    mode: queued
+    trigger:
+      - platform: template
+        value_template: >-
+          {% set m = states('sensor.touchkio_mrtn_hub_last_active') %}
+          {% set lim = states('input_number.kiosk_apagar_min') | int(0) %}
+          {{ lim > 0 and m | is_number and m | int >= lim }}
+        id: sin_uso
+      - platform: template
+        value_template: >-
+          {% set m = states('sensor.touchkio_mrtn_hub_last_active') %}
+          {{ m | is_number and m | int < 1 }}
+        id: en_uso
+    variables:
+      pantalla: light.touchkio_mrtn_hub_display
+    action:
+      - choose:
+          - conditions:
+              - condition: trigger
+                id: sin_uso
+              - condition: template
+                value_template: "{{ is_state(pantalla, 'on') }}"
+            sequence:
+              - service: input_boolean.turn_on
+                target:
+                  entity_id: input_boolean.kiosk_apagado
+              - service: light.turn_off
+                target:
+                  entity_id: "{{ pantalla }}"
+          - conditions:
+              - condition: trigger
+                id: en_uso
+              - condition: state
+                entity_id: input_boolean.kiosk_apagado
+                state: "on"
+            sequence:
+              - service: input_boolean.turn_off
+                target:
+                  entity_id: input_boolean.kiosk_apagado
+              # Atenuada: la prende kiosk_brillo_nocturno con el brillo de antes de atenuar
+              - if:
+                  - condition: state
+                    entity_id: input_boolean.kiosk_atenuado
+                    state: "off"
+                then:
+                  - service: light.turn_on
+                    target:
+                      entity_id: "{{ pantalla }}"
 
   # Si nadie toca la pantalla un rato, el kiosco vuelve a su página de inicio (Overview).
   # last_active son los minutos desde el último toque; dispara una vez al pasar el umbral.
