@@ -119,36 +119,37 @@ button_card_templates:
     custom_fields:
       # Own pointer handling instead of <input type=range>: on touch a range
       # only reacts to drags, so a plain tap did nothing. Tap = jump to that
-      # point, drag = live preview, release = send. A vertical swipe makes the
-      # browser scroll (touch-action: pan-y) and fires pointercancel -> undo.
+      # point, drag = live preview + light updates live, release = final send. A vertical
+      # swipe makes the browser scroll (touch-action: pan-y) and fires pointercancel -> undo
+      # of the preview (anything already sent while dragging stays).
       # The preview never writes into #state: button-card renders it with Lit and
       # overwriting its text breaks Lit (the card stops updating). The % goes in a
       # data-pv attribute shown by CSS, and 5 s after release the tile is repainted
       # from the real state in HA.
       slider: |
         [[[
+          // The preview is a CSS variable (--sl-pv) on ha-card that the card's own background uses
+          // instead of the HA value while it is set. button-card re-renders the background on every
+          // state change (also the intermediate ones the live updates cause), so writing the
+          // background directly made the fill jump back and forth. Released 5 s after letting go.
           const calc = `const r=this.getBoundingClientRect();` +
-            `const v=Math.max(5,Math.min(100,Math.round((event.clientX-r.left)/r.width*100)));`;
-          const paint = `const root=this.getRootNode();const c=root.querySelector('ha-card');` +
-            `const at='calc(${variables.iw}px + (100% - ${variables.iw}px) * '+v+' / 100)';` +
-            `c.style.background='linear-gradient(90deg, rgba(255,255,255,0.22) '+at+', rgba(0,0,0,0.15) '+at+')';` +
+            `const v=Math.max(1,Math.min(100,Math.round((event.clientX-r.left)/r.width*100)));`;
+          const paint = `const root=this.getRootNode();root.querySelector('ha-card').style.setProperty('--sl-pv',v);` +
             `const s=root.querySelector('#state');if(s)s.setAttribute('data-pv',v+' %');`;
+          const clear = `const c=root.querySelector('ha-card');if(c)c.style.removeProperty('--sl-pv');` +
+            `const s=root.querySelector('#state');if(s)s.removeAttribute('data-pv');`;
           const send = `const h=this.getRootNode().host;` +
             `(h.hass||document.querySelector('home-assistant').hass).callService('light','turn_on',` +
             `{entity_id:'${entity.entity_id}',brightness_pct:v});`;
-          const sync = `const root=tr.getRootNode();const s=root.querySelector('#state');if(s)s.removeAttribute('data-pv');` +
-            `const st=(root.host.hass||document.querySelector('home-assistant').hass).states['${entity.entity_id}'];` +
-            `const p=st&&st.state==='on'?Math.round((st.attributes.brightness||0)/2.55):0;` +
-            `const at='calc(${variables.iw}px + (100% - ${variables.iw}px) * '+p+' / 100)';` +
-            `root.querySelector('ha-card').style.background='linear-gradient(90deg, rgba(255,255,255,0.22) '+at+', rgba(0,0,0,0.15) '+at+')';`;
-          const down = `this._d=1;clearTimeout(this._t);const c0=this.getRootNode().querySelector('ha-card');` +
-            `this._bg=c0.style.background;` +
+          // While dragging the light follows too, at most every 250 ms (_ls = last send, _lv = last value).
+          const live = `if(v!==this._lv&&Date.now()-(this._ls||0)>250){this._ls=Date.now();this._lv=v;` + send + `}`;
+          const down = `this._d=1;this._lv=-1;this._ls=Date.now();clearTimeout(this._t);` +
             `try{this.setPointerCapture(event.pointerId)}catch(e){}` + calc + paint;
-          const move = `if(!this._d)return;` + calc + paint;
+          const move = `if(!this._d)return;` + calc + paint + live;
           const up = `if(!this._d)return;this._d=0;event.stopPropagation();` + calc + paint + send +
-            `const tr=this;this._t=setTimeout(()=>{` + sync + `},5000);`;
-          const cancel = `if(!this._d)return;this._d=0;const c=this.getRootNode().querySelector('ha-card');` +
-            `c.style.background=this._bg;const s=this.getRootNode().querySelector('#state');if(s)s.removeAttribute('data-pv');`;
+            `const root=this.getRootNode();this._t=setTimeout(()=>{` + clear + `},5000);`;
+          const cancel = `if(!this._d)return;this._d=0;const root=this.getRootNode();` +
+            `this._t=setTimeout(()=>{` + clear + `},this._lv>0?5000:0);`;
           // Keep every event inside the track, or the card's own tap_action
           // (toggle, on Lights) would fire too.
           const stop = 'event.stopPropagation()';
@@ -162,7 +163,7 @@ button_card_templates:
         - background: |
             [[[
               const pct = entity && entity.state === 'on' ? Math.round((entity.attributes.brightness || 0) / 2.55) : 0;
-              const at = `calc(${variables.iw}px + (100% - ${variables.iw}px) * ${pct} / 100)`;
+              const at = `calc(${variables.iw}px + (100% - ${variables.iw}px) * var(--sl-pv, ${pct}) / 100)`;
               return `linear-gradient(90deg, rgba(255, 255, 255, 0.22) ${at}, rgba(0, 0, 0, 0.15) ${at})`;
             ]]]
       img_cell:
@@ -183,7 +184,7 @@ button_card_templates:
             - background: |
                 [[[
                   const pct = Math.round((entity.attributes.brightness || 0) / 2.55);
-                  const at = `calc(${variables.iw}px + (100% - ${variables.iw}px) * ${pct} / 100)`;
+                  const at = `calc(${variables.iw}px + (100% - ${variables.iw}px) * var(--sl-pv, ${pct}) / 100)`;
                   return `linear-gradient(90deg, rgba(255, 255, 255, 0.22) ${at}, rgba(0, 0, 0, 0.15) ${at})`;
                 ]]]
           name:
