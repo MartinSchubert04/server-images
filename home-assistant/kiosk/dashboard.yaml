@@ -1533,6 +1533,54 @@ views:
                           max: 200
                         view_layout:
                           grid-column: span 2
+                      # Opens a small dialog with the button that turns the screen off. Touching the
+                      # screen turns it back on (TouchKio ignores that touch, so nothing gets clicked).
+                      - type: custom:button-card
+                        template: fusion_tile
+                        # No entity: with the display's light the tile would always look "on".
+                        name: Screen off
+                        icon: mdi:monitor-off
+                        show_state: false
+                        hold_action: { action: none }
+                        tap_action:
+                          action: javascript
+                          javascript: |
+                            [[[
+                              document.querySelectorAll('.mrtn-setting').forEach((e) => (e._close ? e._close() : e.remove()));
+                              const el = (tag, css, text) => {
+                                const e = document.createElement(tag);
+                                if (css) e.style.cssText = css;
+                                if (text !== undefined) e.textContent = text;
+                                return e;
+                              };
+                              const btnCss = 'border:none;border-radius:10.4px;height:52px;font:500 18px "Inter Variable",system-ui;' +
+                                'cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;';
+                              const ov = el('div', 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.55);display:flex;' +
+                                'align-items:center;justify-content:center;font-family:"Inter Variable",system-ui;color:#fff;');
+                              ov.className = 'mrtn-setting';
+                              const box = el('div', 'width:min(320px,92vw);box-sizing:border-box;background:rgb(30,32,33);' +
+                                'border-radius:16px;padding:20px 16px 16px;box-shadow:0 12px 40px rgba(0,0,0,0.5);text-align:center;');
+                              ov.appendChild(box);
+                              const ic = el('ha-icon', 'display:block;margin:0 auto 10px;--mdc-icon-size:44px;width:44px;height:44px;color:rgba(255,255,255,0.8);');
+                              ic.setAttribute('icon', 'mdi:monitor-off');
+                              box.appendChild(ic);
+                              box.appendChild(el('div', 'font-size:20px;font-weight:600;margin-bottom:6px;', 'Turn off the screen?'));
+                              box.appendChild(el('div', 'font-size:14px;color:rgba(255,255,255,0.55);margin-bottom:18px;', 'Touch it again to turn it back on.'));
+                              const row = el('div', 'display:grid;grid-template-columns:1fr 1fr;gap:10px;');
+                              const cancel = el('button', btnCss + 'background:rgba(255,255,255,0.1);color:#fff;', 'Cancel');
+                              const off = el('button', btnCss + 'background:rgba(255,255,255,0.85);color:rgb(48,51,52);', 'Turn off');
+                              row.appendChild(cancel); row.appendChild(off);
+                              box.appendChild(row);
+                              const close = () => ov.remove();
+                              ov._close = close;
+                              cancel.addEventListener('click', close);
+                              ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
+                              off.addEventListener('click', () => {
+                                close();
+                                hass.callService('light', 'turn_off', {entity_id: 'light.touchkio_mrtn_hub_display'});
+                              });
+                              document.body.appendChild(ov);
+                            ]]]
               - type: vertical-stack
                 cards:
                   - type: custom:button-card
