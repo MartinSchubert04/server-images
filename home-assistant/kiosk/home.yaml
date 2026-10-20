@@ -892,6 +892,110 @@ views:
                 cards:
                   - type: custom:button-card
                     template: desk_title
+                    name: Server
+                  - type: custom:layout-card
+                    layout_type: custom:grid-layout
+                    layout: *stats_layout
+                    cards:
+                      - type: custom:button-card
+                        template: desk_stat
+                        entity: sensor.host_docker_internal_cpu_usage
+                        name: CPU
+                        icon: mdi:cpu-64-bit
+                        variables: { zero: 1 }
+                      - type: custom:button-card
+                        template: desk_stat
+                        entity: sensor.host_docker_internal_memory_usage
+                        name: Memory
+                        icon: mdi:memory
+                        variables: { zero: 1 }
+                      - type: custom:button-card
+                        template: desk_stat
+                        entity: sensor.bedroom_plug_server_power
+                        name: Server power
+                        icon: mdi:flash
+                        tap_action: { action: none }
+                        hold_action: { action: none }
+                        variables: { zero: 1 }
+                      - type: custom:button-card
+                        template: desk_stat
+                        entity: sensor.host_docker_internal_package_id_0_temperature
+                        name: CPU temp
+                        icon: mdi:thermometer
+                      - type: custom:button-card
+                        template: desk_stat
+                        entity: sensor.host_docker_internal_nvidia_geforce_rtx_2060_super_gpu_nvidia0_processor_usage
+                        name: GPU
+                        icon: mdi:expansion-card
+                        variables: { zero: 1 }
+                      - type: custom:button-card
+                        template: desk_stat
+                        entity: sensor.host_docker_internal_nvidia_geforce_rtx_2060_super_gpu_nvidia0_temperature
+                        name: GPU temp
+                        icon: mdi:thermometer
+                  # The kiosk (Pi 5, TouchKio), same data as the kiosk's HUB page.
+                  - type: custom:button-card
+                    template: desk_title_next
+                    name: Hub
+                  - type: custom:layout-card
+                    layout_type: custom:grid-layout
+                    layout: *stats_layout
+                    cards:
+                      - type: custom:button-card
+                        template: desk_stat
+                        entity: sensor.touchkio_mrtn_hub_processor_usage
+                        name: CPU
+                        icon: mdi:cpu-64-bit
+                        variables: { zero: 1 }
+                      - type: custom:button-card
+                        template: desk_stat
+                        entity: sensor.touchkio_mrtn_hub_memory_usage
+                        name: Memory
+                        icon: mdi:memory
+                        variables: { zero: 1 }
+                      - type: custom:button-card
+                        template: desk_stat
+                        entity: sensor.touchkio_mrtn_hub_processor_temperature
+                        name: CPU temp
+                        icon: mdi:thermometer
+                  - type: custom:layout-card
+                    layout_type: custom:grid-layout
+                    layout:
+                      <<: *tiles_layout
+                      margin: 12px 0 0
+                    cards:
+                      - type: custom:button-card
+                        template: desk_slider
+                        entity: light.touchkio_mrtn_hub_display
+                        name: Screen
+                        tap_action: { action: none }
+                        view_layout:
+                          grid-column: 1 / -1
+                      # TouchKio reports uptime in minutes.
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.touchkio_mrtn_hub_up_time
+                        name: Uptime
+                        icon: mdi:timer-outline
+                        state_display: |
+                          [[[
+                            const m = Number(entity.state);
+                            if (isNaN(m)) return entity.state;
+                            const d = Math.floor(m / 1440), h = Math.floor(m % 1440 / 60);
+                            return d ? `${d}d ${h}h` : `${h}h ${Math.round(m % 60)}m`;
+                          ]]]
+                      - type: custom:button-card
+                        template: desk_tile
+                        entity: sensor.touchkio_mrtn_hub_last_active
+                        name: Last touch
+                        icon: mdi:gesture-tap
+                        state_display: |
+                          [[[ return `${entity.state} min ago`; ]]]
+              # Third column (only on very wide screens; stacks below otherwise).
+              - type: vertical-stack
+                cards:
+                  - type: custom:button-card
+                    template: desk_title
                     name: Me
                   - type: custom:layout-card
                     layout_type: custom:grid-layout
@@ -946,38 +1050,6 @@ views:
                           [[[ return entity.attributes.motivo ? `${entity.state} · ${entity.attributes.motivo}` : entity.state; ]]]
                   - type: custom:button-card
                     template: desk_title_next
-                    name: Server
-                  - type: custom:layout-card
-                    layout_type: custom:grid-layout
-                    layout: *stats_layout
-                    cards:
-                      - type: custom:button-card
-                        template: desk_stat
-                        entity: sensor.host_docker_internal_cpu_usage
-                        name: CPU
-                        icon: mdi:cpu-64-bit
-                        variables: { zero: 1 }
-                      - type: custom:button-card
-                        template: desk_stat
-                        entity: sensor.host_docker_internal_memory_usage
-                        name: Memory
-                        icon: mdi:memory
-                        variables: { zero: 1 }
-                      - type: custom:button-card
-                        template: desk_stat
-                        entity: sensor.bedroom_plug_server_power
-                        name: Server power
-                        icon: mdi:flash
-                        tap_action: { action: none }
-                        hold_action: { action: none }
-                        variables: { zero: 1 }
-                      - type: custom:button-card
-                        template: desk_stat
-                        entity: sensor.host_docker_internal_package_id_0_temperature
-                        name: CPU temp
-                        icon: mdi:thermometer
-                  - type: custom:button-card
-                    template: desk_title_next
                     name: Network
                   - type: custom:layout-card
                     layout_type: custom:grid-layout
@@ -1000,6 +1072,24 @@ views:
                             return `${entity.state} · ${w} on Wi-Fi`;
                           ]]]
                         tap_action: { action: navigate, navigation_path: network }
+                  - type: custom:layout-card
+                    layout_type: custom:grid-layout
+                    layout:
+                      <<: *stats_layout
+                      margin: 12px 0 0
+                    cards:
+                      - type: custom:button-card
+                        template: desk_stat
+                        entity: sensor.adguard_home_dns_queries
+                        name: DNS queries
+                        icon: mdi:dns
+                        variables: { zero: 1 }
+                      - type: custom:button-card
+                        template: desk_stat
+                        entity: sensor.adguard_home_dns_queries_blocked
+                        name: Blocked
+                        icon: mdi:shield-off
+                        variables: { zero: 1 }
 
   - title: Server
     path: server
