@@ -1152,13 +1152,13 @@ views:
                 icon: mdi:thermometer
               - type: custom:button-card
                 template: desk_stat
-                entity: sensor.host_docker_internal_wlxdc6279d174da_rx
+                entity: sensor.host_docker_internal_enp3s0_rx
                 name: Wi-Fi down
                 icon: mdi:download
                 variables: { zero: 1 }
               - type: custom:button-card
                 template: desk_stat
-                entity: sensor.host_docker_internal_wlxdc6279d174da_tx
+                entity: sensor.host_docker_internal_enp3s0_tx
                 name: Wi-Fi up
                 icon: mdi:upload
                 variables: { zero: 1 }
@@ -1372,9 +1372,9 @@ views:
                 title: Network (24 h)
                 hours_to_show: 24
                 entities:
-                  - entity: sensor.host_docker_internal_wlxdc6279d174da_rx
+                  - entity: sensor.host_docker_internal_enp3s0_rx
                     name: Wi-Fi down
-                  - entity: sensor.host_docker_internal_wlxdc6279d174da_tx
+                  - entity: sensor.host_docker_internal_enp3s0_tx
                     name: Wi-Fi up
                   - entity: sensor.host_docker_internal_tailscale0_rx
                     name: Tailscale down

@@ -1877,12 +1877,12 @@ views:
                 hold_action: { action: none }
               - type: custom:button-card
                 template: fusion_tile
-                entity: sensor.host_docker_internal_wlxdc6279d174da_rx
+                entity: sensor.host_docker_internal_enp3s0_rx
                 name: Wi-Fi down
                 icon: mdi:download
               - type: custom:button-card
                 template: fusion_tile
-                entity: sensor.host_docker_internal_wlxdc6279d174da_tx
+                entity: sensor.host_docker_internal_enp3s0_tx
                 name: Wi-Fi up
                 icon: mdi:upload
           # The Docker VM Home Assistant runs in (System Monitor)
@@ -1927,9 +1927,9 @@ views:
                 title: Wi-Fi (24 h)
                 hours_to_show: 24
                 entities:
-                  - entity: sensor.host_docker_internal_wlxdc6279d174da_rx
+                  - entity: sensor.host_docker_internal_enp3s0_rx
                     name: Down
-                  - entity: sensor.host_docker_internal_wlxdc6279d174da_tx
+                  - entity: sensor.host_docker_internal_enp3s0_tx
                     name: Up
               - type: history-graph
                 title: Power (24 h)
