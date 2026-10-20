@@ -13,6 +13,18 @@ script: !include scripts.yaml
 scene: !include scenes.yaml
 
 homeassistant:
+  # El kiosk (Pi mrtn-hub) entra solo como el usuario mrtn-hub, sin pantalla de login,
+  # así no se queda deslogueado si HA rechaza o borra el token. El resto sigue con login normal.
+  auth_providers:
+    - type: trusted_networks
+      trusted_networks:
+        - 100.81.53.75/32 # Pi por Tailscale (así entra hoy el kiosk)
+        - 192.168.0.40/32 # Pi por LAN
+      trusted_users:
+        100.81.53.75: 4d7f570c222c437a8e3a729cd79e4f83 # mrtn-hub
+        192.168.0.40: 4d7f570c222c437a8e3a729cd79e4f83 # mrtn-hub
+      allow_bypass_login: true
+    - type: homeassistant
   packages: !include_dir_named packages
   allowlist_external_dirs:
     - /config/www/snapshots
