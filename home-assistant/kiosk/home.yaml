@@ -440,40 +440,26 @@ x-sidebar: &sidebar
         :host { position: static; width: auto; height: auto; border-right: none; border-bottom: 1px solid rgba(115, 115, 115, 0.25); }
       }
   cards:
-    # Clock and date
+    # Clock and date (live_clock keeps them up to date, see dashboard.yaml)
     - type: custom:button-card
-      show_icon: false
-      show_name: true
-      show_state: false
-      show_label: true
-      triggers_update: all
-      label: |
-        [[[ return new Date().toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'}); ]]]
-      name: |
-        [[[ return new Date().toLocaleDateString('en-US', {weekday: 'long', month: 'long', day: 'numeric'}); ]]]
-      tap_action: { action: none }
+      template: live_clock
       styles:
         card:
-          - background: none
-          - border: none
-          - box-shadow: none
           - padding: 22px 0 0 4px
-          - font-family: '"Inter Variable", system-ui'
         grid:
-          - grid-template-areas: '"l" "n"'
-          - grid-template-rows: auto auto
-        label:
-          - justify-self: start
-          - font-size: 80px
-          - font-weight: 500
-          - line-height: 90px
-          - letter-spacing: -1px
-          - color: rgba(255, 255, 255, 0.85)
-        name:
-          - justify-self: start
-          - font-size: 19px
-          - line-height: 24px
-          - color: rgba(255, 255, 255, 0.7)
+          - grid-template-areas: '"time" "date"'
+          - grid-template-columns: 1fr
+        custom_fields:
+          time:
+            - font-size: 80px
+            - font-weight: 500
+            - line-height: 90px
+            - letter-spacing: -1px
+            - color: rgba(255, 255, 255, 0.85)
+          date:
+            - font-size: 19px
+            - line-height: 24px
+            - color: rgba(255, 255, 255, 0.7)
     # Now: condition, temperature and the details that matter.
     - type: custom:button-card
       entity: weather.clima

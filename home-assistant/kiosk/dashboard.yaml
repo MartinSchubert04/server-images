@@ -525,6 +525,71 @@ button_card_templates:
           - display: none
 
   # Section title ("Room", "Me", ...).
+  # Clock and date that keep themselves up to date. A template with new Date() only runs
+  # when button-card re-renders, and that does not happen on every state change, so the
+  # time used to stay stuck. A timer (one for the whole page, window.__mrtnClock) rewrites
+  # the text of every [data-clk] span every 5 s. Fields: time and date; hide the one a card
+  # does not use (custom_fields: {date: [display: none]}).
+  live_clock:
+    show_icon: false
+    show_name: false
+    show_state: false
+    show_label: false
+    tap_action:
+      action: none
+    hold_action:
+      action: none
+    custom_fields:
+      time: |
+        [[[
+          const T = window.__mrtnClock = window.__mrtnClock || { cards: new Set() };
+          T.fmt = T.fmt || {
+            time: () => new Date().toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'}),
+            date: () => new Date().toLocaleDateString('en-US', {weekday: 'long', month: 'long', day: 'numeric'}),
+          };
+          T.cards.add(this);
+          if (!T.timer) T.timer = setInterval(() => {
+            for (const c of T.cards) {
+              if (!c.isConnected || !c.shadowRoot) continue;
+              c.shadowRoot.querySelectorAll('[data-clk]').forEach((e) => {
+                const v = T.fmt[e.dataset.clk]();
+                if (e.textContent !== v) e.textContent = v;
+              });
+            }
+          }, 5000);
+          return `<span data-clk="time">${T.fmt.time()}</span>`;
+        ]]]
+      date: |
+        [[[
+          const T = window.__mrtnClock = window.__mrtnClock || { cards: new Set() };
+          T.fmt = T.fmt || {
+            time: () => new Date().toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'}),
+            date: () => new Date().toLocaleDateString('en-US', {weekday: 'long', month: 'long', day: 'numeric'}),
+          };
+          T.cards.add(this);
+          if (!T.timer) T.timer = setInterval(() => {
+            for (const c of T.cards) {
+              if (!c.isConnected || !c.shadowRoot) continue;
+              c.shadowRoot.querySelectorAll('[data-clk]').forEach((e) => {
+                const v = T.fmt[e.dataset.clk]();
+                if (e.textContent !== v) e.textContent = v;
+              });
+            }
+          }, 5000);
+          return `<span data-clk="date">${T.fmt.date()}</span>`;
+        ]]]
+    styles:
+      card:
+        - background: none
+        - border: none
+        - box-shadow: none
+        - font-family: '"Inter Variable", system-ui'
+      custom_fields:
+        time:
+          - justify-self: start
+        date:
+          - justify-self: start
+
   fusion_title:
     show_icon: false
     show_state: false
@@ -1023,53 +1088,27 @@ x-sidebar: &sidebar
         font-family: "Inter Variable", system-ui;
       }
   cards:
-    # Clock
+    # Clock and date
     - type: custom:button-card
-      show_icon: false
-      show_name: false
-      show_state: false
-      show_label: true
-      triggers_update: all
-      label: |
-        [[[ const d = new Date(); return d.toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'}); ]]]
-      tap_action:
-        action: none
+      template: live_clock
       styles:
         card:
-          - background: none
-          - border: none
-          - box-shadow: none
           - padding: 16px 0 0 9.6px
           - margin-left: -1.6px
-          - font-family: '"Inter Variable", system-ui'
-        label:
-          - justify-self: start
-          - font-size: 54.4px
-          - font-weight: 500
-          - line-height: 64px
-          - color: rgba(255, 255, 255, 0.8)
-    # Date
-    - type: custom:button-card
-      show_icon: false
-      show_name: true
-      show_state: false
-      triggers_update: all
-      name: |
-        [[[ return new Date().toLocaleDateString('en-US', {weekday: 'long', month: 'long', day: 'numeric'}); ]]]
-      tap_action:
-        action: none
-      styles:
-        card:
-          - background: none
-          - border: none
-          - box-shadow: none
-          - padding: 2px 0 0 9.6px
-          - font-family: '"Inter Variable", system-ui'
-        name:
-          - justify-self: start
-          - font-size: 16px
-          - line-height: 19px
-          - color: rgba(255, 255, 255, 0.7)
+        grid:
+          - grid-template-areas: '"time" "date"'
+          - grid-template-columns: 1fr
+        custom_fields:
+          time:
+            - font-size: 54.4px
+            - font-weight: 500
+            - line-height: 64px
+            - color: rgba(255, 255, 255, 0.8)
+          date:
+            - margin: 2px 0 0 1.6px
+            - font-size: 16px
+            - line-height: 19px
+            - color: rgba(255, 255, 255, 0.7)
     # Now: condition, temperature and details (same as the desktop Home's sidebar).
     - type: custom:button-card
       entity: weather.clima
