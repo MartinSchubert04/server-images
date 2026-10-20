@@ -1052,12 +1052,9 @@ x-sidebar: &sidebar
       show_icon: false
       show_name: true
       show_state: false
-      show_label: true
       triggers_update: all
       name: |
-        [[[ return new Date().toLocaleDateString('en-US', {weekday: 'long'}); ]]]
-      label: |
-        [[[ return new Date().toLocaleDateString('en-US', {month: 'long', day: 'numeric'}); ]]]
+        [[[ return new Date().toLocaleDateString('en-US', {weekday: 'long', month: 'long', day: 'numeric'}); ]]]
       tap_action:
         action: none
       styles:
@@ -1065,22 +1062,64 @@ x-sidebar: &sidebar
           - background: none
           - border: none
           - box-shadow: none
-          - padding: 10px 0 31px 9.6px
+          - padding: 2px 0 0 9.6px
           - font-family: '"Inter Variable", system-ui'
         name:
           - justify-self: start
           - font-size: 16px
           - line-height: 19px
-          - color: rgba(255, 255, 255, 0.8)
-        label:
-          - justify-self: start
-          - font-size: 16px
-          - line-height: 19px
-          - color: rgba(255, 255, 255, 0.8)
-    # Forecast: 6 days with ha-fusion's Meteocons icons (/local/kiosk/meteocons),
-    # read from the Open-Meteo daily lists in sensor.clima_pronostico_diario.
+          - color: rgba(255, 255, 255, 0.7)
+    # Now: condition, temperature and details (same as the desktop Home's sidebar).
     - type: custom:button-card
-      entity: sensor.clima_pronostico_diario
+      entity: weather.clima
+      show_icon: false
+      show_name: false
+      show_state: false
+      tap_action:
+        action: more-info
+      custom_fields:
+        now: |
+          [[[
+            const a = entity.attributes;
+            const names = {'clear-night': 'Clear', cloudy: 'Cloudy', fog: 'Fog', hail: 'Hail', lightning: 'Storm',
+              'lightning-rainy': 'Storm', partlycloudy: 'Partly cloudy', pouring: 'Pouring', rainy: 'Rain',
+              snowy: 'Snow', 'snowy-rainy': 'Sleet', sunny: 'Sunny', windy: 'Windy', 'windy-variant': 'Windy', exceptional: 'Exceptional'};
+            const day = (states['sun.sun'] || {}).state !== 'below_horizon';
+            const icon = `/local/kiosk/meteocons/${entity.state}-${day ? 'day' : 'night'}.svg`;
+            const r = (v) => v === undefined || v === null ? '-' : Math.round(v);
+            return `<div class="top"><img src="${icon}"><div><div class="t">${r(a.temperature)}°</div>` +
+              `<div class="c">${names[entity.state] || entity.state}</div></div></div>` +
+              `<div class="det"><span><ha-icon icon="mdi:thermometer-lines"></ha-icon>Feels ${r(a.apparent_temperature)}°</span>` +
+              `<span><ha-icon icon="mdi:water-percent"></ha-icon>${r(a.humidity)} %</span>` +
+              `<span><ha-icon icon="mdi:weather-windy"></ha-icon>${r(a.wind_speed)} km/h</span></div>`;
+          ]]]
+      styles:
+        card:
+          - background: none
+          - border: none
+          - box-shadow: none
+          - padding: 14px 9.6px 0
+          - font-family: '"Inter Variable", system-ui'
+          - color: rgba(255, 255, 255, 0.85)
+        grid:
+          - grid-template-areas: '"now"'
+        custom_fields:
+          now:
+            - justify-self: stretch
+      extra_styles: |
+        ha-card { overflow: visible !important; }
+        .top { display: flex; align-items: center; gap: 8px; }
+        .top img { width: 84px; height: 84px; margin: -10px -4px -10px -10px; }
+        .t { font-size: 46px; font-weight: 500; line-height: 52px; text-align: left; }
+        .c { font-size: 16px; color: rgba(255, 255, 255, 0.7); text-align: left; }
+        .det { display: flex; justify-content: space-between; margin-top: 12px; font-size: 14.5px; color: rgba(255, 255, 255, 0.7); }
+        .det span { display: flex; align-items: center; gap: 4px; }
+        .det ha-icon { --mdc-icon-size: 18px; width: 18px; height: 18px; display: flex; color: rgba(255, 255, 255, 0.5); }
+    # Next hours (every 2 h) between two lines, then the next 6 days in a row.
+    # Open-Meteo lists from packages/clima.yaml, ha-fusion's Meteocons icons.
+    - type: custom:button-card
+      entity: sensor.clima_pronostico_horario
+      triggers_update: [sensor.clima_pronostico_diario]
       show_icon: false
       show_name: false
       show_state: false
@@ -1095,76 +1134,78 @@ x-sidebar: &sidebar
               61: 'rainy', 63: 'rainy', 65: 'pouring', 66: 'snowy-rainy', 67: 'snowy-rainy',
               71: 'snowy', 73: 'snowy', 75: 'snowy', 77: 'snowy', 80: 'rainy', 81: 'rainy', 82: 'pouring',
               85: 'snowy', 86: 'snowy', 95: 'lightning-rainy', 96: 'lightning-rainy', 99: 'lightning-rainy'};
-            const a = entity.attributes;
+            const h = entity.attributes, a = (states['sensor.clima_pronostico_diario'] || {}).attributes || {};
+            const now = Date.now() - 36e5;
+            const hours = (h.time || []).map((t, i) => [t, i]).filter(([t]) => new Date(t).getTime() >= now)
+              .filter((_, k) => k % 2 === 0).slice(0, 6);
+            const strip = hours.map(([t, i]) => {
+              // At night a clear sky is the moon (meteocons' sunny-night is still a sun).
+              let c = cond[h.weather_code[i]] || 'cloudy';
+              if (!h.is_day[i] && c === 'sunny') c = 'clear-night';
+              const p = h.precipitation_probability[i];
+              return `<div class="h"><div class="hh">${t.slice(11, 13)}h</div>` +
+                `<img src="/local/kiosk/meteocons/${c}${h.is_day[i] ? '-day' : '-night'}.svg">` +
+                `<div class="ht">${Math.round(h.temperature_2m[i])}°</div><div class="hp">${p ? p + '%' : ''}</div></div>`;
+            }).join('');
             const days = (a.time || []).slice(0, 6);
-            return '<div class="row">' + days.map((t, i) => {
+            const row = days.map((t, i) => {
               const day = new Date(t + 'T12:00:00').toLocaleDateString('en-US', {weekday: 'short'});
               const icon = cond[a.weather_code[i]] || 'cloudy';
-              const temp = Math.round(a.temperature_2m_max[i]);
               return `<div class="item"><div class="day">${day}</div>` +
                 `<img src="/local/kiosk/meteocons/${icon}-day.svg">` +
-                `<div class="temp">${temp}°C</div></div>`;
-            }).join('') + '</div>';
+                `<div class="temp">${Math.round(a.temperature_2m_max[i])}°C</div></div>`;
+            }).join('');
+            return `<div class="strip">${strip}</div><div class="row">${row}</div>`;
           ]]]
       styles:
         card:
           - background: none
           - border: none
           - box-shadow: none
-          - padding: 10px 0 9px
+          - padding: 14px 0 0
           - font-family: '"Inter Variable", system-ui'
+          - color: rgba(255, 255, 255, 0.8)
         grid:
           - grid-template-areas: '"forecast"'
         custom_fields:
           forecast:
             - justify-self: stretch
       extra_styles: |
-        .row {
-          display: grid;
-          grid-template-columns: repeat(6, minmax(0, 1fr));
-          color: rgba(255, 255, 255, 0.8);
-          font-size: 16px;
-          text-align: center;
-        }
         ha-card { overflow: visible !important; }
+        .strip { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); text-align: center; font-size: 14px;
+          padding: 8px 0 6px; border-top: 1px solid rgba(255, 255, 255, 0.12); border-bottom: 1px solid rgba(255, 255, 255, 0.12); }
+        .hh { color: rgba(255, 255, 255, 0.55); line-height: 18px; }
+        .strip img { width: 38px; height: 38px; margin: 0 auto; display: block; }
+        .ht { font-size: 15px; font-weight: 500; line-height: 19px; }
+        .hp { height: 15px; font-size: 12px; line-height: 15px; color: rgb(75, 166, 237); }
+        .row { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); padding-top: 8px; font-size: 16px; text-align: center; }
         .item { display: flex; flex-direction: column; align-items: center; }
         .day, .temp { height: 23px; line-height: 23px; }
-        img { width: 53px; height: 53px; margin: -1px 0 3px; }
-    # Temperature: same as ha-fusion's graph item. Hourly statistics (mean) for the
-    # last ~month, d3 curveBasis line (1px) over a 50% -> 0% white gradient, 80px tall.
+        .row img { width: 48px; height: 48px; margin: -1px 0 1px; }
+    # Temperature, last 7 days (hourly statistics), with its range.
     - type: custom:button-card
       entity: sensor.clima_temperatura
-      name: Temperature
+      name: Temperature · 7 days
       show_icon: false
       show_state: false
       show_label: true
       label: |
         [[[ return `${entity.state} ${entity.attributes.unit_of_measurement || ''}`; ]]]
-      tap_action:
-        action: more-info
+      tap_action: { action: more-info }
       custom_fields:
         graph: |
           [[[
-            const W = 279, H = 80, card = this, now = Date.now();
+            const W = 279, H = 70, card = this, now = Date.now();
             const draw = (rows) => {
-              const pts = rows
-                .map(r => [new Date(r.start).getTime(), r.mean !== undefined && r.mean !== null ? r.mean : r.state])
-                .filter(p => p[1] !== null && p[1] !== undefined);
+              const pts = rows.map((r) => [new Date(r.start).getTime(), r.mean ?? r.state]).filter((p) => p[1] !== null && p[1] !== undefined);
               if (pts.length < 2) return '';
-              // d3 linear scale .nice() (10 ticks)
-              let lo = Math.min(...pts.map(p => p[1])), hi = Math.max(...pts.map(p => p[1]));
-              if (hi === lo) { lo -= 1; hi += 1; }
-              const raw = (hi - lo) / 10;
-              let step = Math.pow(10, Math.floor(Math.log10(raw)));
-              const err = raw / step;
-              if (err >= Math.sqrt(50)) step *= 10; else if (err >= Math.sqrt(10)) step *= 5; else if (err >= Math.sqrt(2)) step *= 2;
-              lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step;
+              const mn = Math.min(...pts.map((p) => p[1])), mx = Math.max(...pts.map((p) => p[1]));
+              const lo = mn - 1, hi = mx + 1;
               const t0 = pts[0][0], t1 = pts[pts.length - 1][0];
-              const x = t => 1 + (t - t0) / (t1 - t0 || 1) * (W - 2);
-              const y = v => (H - 1) - (v - lo) / (hi - lo) * (H - 2);
-              const xy = pts.map(p => [x(p[0]), y(p[1])]);
-              // d3 curveBasis
-              const f = n => n.toFixed(2);
+              const x = (t) => 1 + (t - t0) / (t1 - t0 || 1) * (W - 2);
+              const y = (v) => (H - 1) - (v - lo) / (hi - lo) * (H - 2);
+              const xy = pts.map((p) => [x(p[0]), y(p[1])]);
+              const f = (n) => n.toFixed(2);
               let d = `M${f(xy[0][0])},${f(xy[0][1])}`;
               let [x0, y0] = xy[0], [x1, y1] = xy[1];
               d += `L${f((5 * x0 + x1) / 6)},${f((5 * y0 + y1) / 6)}`;
@@ -1176,26 +1217,27 @@ x-sidebar: &sidebar
               bez(x1, y1);
               d += `L${f(x1)},${f(y1)}`;
               const area = `${d}L${f(xy[xy.length - 1][0])},${H - 1}L${f(xy[0][0])},${H - 1}Z`;
+              // One tick per midnight
+              let ticks = '';
+              const m = new Date(t0); m.setHours(24, 0, 0, 0);
+              for (let t = m.getTime(); t < t1; t += 864e5) ticks += `<line x1="${f(x(t))}" y1="0" x2="${f(x(t))}" y2="${H}" stroke="rgba(255,255,255,0.07)"/>`;
               return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">` +
                 `<defs><linearGradient id="kg" x1="0" y1="0" x2="0" y2="1">` +
-                `<stop offset="0%" stop-color="rgb(255,255,255)" stop-opacity="0.5"/>` +
-                `<stop offset="100%" stop-color="rgb(255,255,255)" stop-opacity="0"/></linearGradient></defs>` +
-                `<path d="${area}" fill="url(#kg)"/>` +
-                `<path d="${d}" fill="none" stroke="#ffffff" stroke-width="1" stroke-linecap="butt"/></svg>`;
+                `<stop offset="0%" stop-color="#fff" stop-opacity="0.45"/><stop offset="100%" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>` +
+                ticks + `<path d="${area}" fill="url(#kg)"/><path d="${d}" fill="none" stroke="#fff" stroke-width="1"/></svg>` +
+                `<div class="rg"><span>min ${Math.round(mn)}°</span><span>max ${Math.round(mx)}°</span></div>`;
             };
-            // Shared across views: every tab has its own copy of this card, and
-            // a per-card cache made the graph blink empty on each tab switch.
-            const cache = window.__kioskGraphs = window.__kioskGraphs || {};
+            const cache = window.__kioskGraphs7 = window.__kioskGraphs7 || {};
             const key = entity.entity_id;
             if (!cache[key] || now - cache[key].t > 600000) {
               cache[key] = { t: now, svg: cache[key] ? cache[key].svg : '' };
               hass.connection.sendMessagePromise({
                 type: 'recorder/statistics_during_period',
-                start_time: new Date(now - 2629800 * 1000).toISOString(),
+                start_time: new Date(now - 7 * 864e5).toISOString(),
                 end_time: new Date(now).toISOString(),
-                statistic_ids: [entity.entity_id],
+                statistic_ids: [key],
                 period: 'hour',
-              }).then(res => {
+              }).then((res) => {
                 cache[key].svg = draw(res[key] || []);
                 const el = card.shadowRoot && card.shadowRoot.getElementById('kgraph');
                 if (el) el.innerHTML = cache[key].svg;
@@ -1210,26 +1252,70 @@ x-sidebar: &sidebar
           - box-shadow: none
           - border-radius: 0
           - padding: 0 9.6px
-          - margin-top: 30px
+          - margin-top: 16px
           - font-family: '"Inter Variable", system-ui'
         grid:
           - grid-template-areas: '"n" "l" "graph"'
-          - grid-template-rows: 20px 24px 80px
+          - grid-template-rows: 20px 24px auto
         name:
           - justify-self: start
           - font-size: 16px
-          - line-height: 20px
           - color: rgba(255, 255, 255, 0.8)
         label:
           - justify-self: start
-          - align-self: start
           - font-size: 16px
-          - line-height: 20px
           - color: rgba(255, 255, 255, 0.8)
         custom_fields:
           graph:
-            - height: 80px
+            - margin-top: 6px
             - line-height: 0
+      extra_styles: |
+        .rg { display: flex; justify-content: space-between; margin-top: 6px; font-size: 13px; line-height: 16px; color: rgba(255, 255, 255, 0.5); }
+    # Sun (same as the desktop Home): today's sunrise and sunset, and how long the day is.
+    - type: custom:button-card
+      entity: sun.sun
+      show_icon: false
+      show_name: false
+      show_state: false
+      triggers_update: [sensor.sun_next_rising, sensor.sun_next_setting]
+      tap_action: { action: javascript, javascript: "[[[ location.hash = 'sun'; ]]]" }
+      custom_fields:
+        s: |
+          [[[
+            const t = (id) => new Date((states[id] || {}).state).getTime();
+            const up = entity.state === 'above_horizon';
+            const rise = up ? t('sensor.sun_next_rising') - 864e5 : t('sensor.sun_next_rising');
+            const set = t('sensor.sun_next_setting');
+            const hm = (ms) => isNaN(ms) ? '--:--' : new Date(ms).toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'});
+            const len = set - rise, lh = Math.floor(len / 36e5), lm = Math.round(len % 36e5 / 6e4);
+            return `<span><ha-icon icon="mdi:weather-sunset-up"></ha-icon>${hm(rise)}</span>` +
+              `<span class="m">${isNaN(len) ? '' : `${lh} h ${lm} min of light`}</span>` +
+              `<span><ha-icon icon="mdi:weather-sunset-down"></ha-icon>${hm(set)}</span>`;
+          ]]]
+      styles:
+        card:
+          - background: none
+          - border: none
+          - box-shadow: none
+          - padding: 10px 9.6px 0
+          - margin-top: 14px
+          - border-top: 1px solid rgba(255, 255, 255, 0.08)
+          - border-radius: 0
+          - font-family: '"Inter Variable", system-ui'
+        grid:
+          - grid-template-areas: '"s"'
+        custom_fields:
+          s:
+            - justify-self: stretch
+            - display: flex
+            - justify-content: space-between
+            - align-items: center
+            - font-size: 15px
+            - color: rgba(255, 255, 255, 0.8)
+      extra_styles: |
+        #s span { display: flex; align-items: center; gap: 6px; }
+        #s .m { font-size: 13px; color: rgba(255, 255, 255, 0.5); }
+        #s ha-icon { --mdc-icon-size: 20px; width: 20px; height: 20px; display: flex; color: rgba(255, 255, 255, 0.55); }
 
 x-layout: &layout
   grid-template-columns: 344px 1fr
