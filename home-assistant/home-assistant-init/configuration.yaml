@@ -38,11 +38,8 @@ shell_command:
   apagar_pc: 'ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i /config/.ssh/id_ed25519 martin@192.168.0.10 "shutdown /s /t 0"'
   wake_pc: 'ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i /config/.ssh/id_ed25519 tincho@192.168.0.100 "sh /home/tincho/Projects/docker-images/home-assistant/scripts/wake_on_lan.sh"'
 
-http:
-  use_x_forwarded_for: true
-  trusted_proxies:
-    # Redes de Docker: la subred de "home" no es la misma en Windows (172.21) que en Linux (172.18)
-    - 172.16.0.0/12
+# http (use_x_forwarded_for y trusted_proxies 172.16.0.0/12, las redes de Docker) ya no va acá:
+# HA 2026.10 lo pasó a la interfaz (Configuración → Sistema → Red) y avisa si sigue en el YAML.
 
 rest:
   - resource: http://frigate:5000/api/stats
