@@ -24,6 +24,9 @@ services:
       - waha_sessions:/data/waha:ro
       - autoapply_auth:/data/autoapply-auth:ro
       - ..:/data/compose:ro
+      # Otros proyectos con datos y secretos fuera de git (SQLite, .env, tuya.json)
+      - ../../consumo-pc:/data/consumo-pc:ro
+      - ../../Job-autoapply:/data/job-autoapply:ro
     ports:
       - "51515:51515"
     restart: unless-stopped
