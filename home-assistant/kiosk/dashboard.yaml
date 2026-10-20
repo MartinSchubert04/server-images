@@ -202,6 +202,243 @@ button_card_templates:
         -webkit-tap-highlight-color: transparent;
       }
 
+  # Tap action for settings: opens our own small dialog instead of more-info (whose history
+  # makes no sense for a setting). Use it on top of a tile: `template: [fusion_tile, setting_popup]`.
+  # - input_datetime (time only): keypad to type the time (the keyboard works too), then ✓.
+  # - input_number / number: big value, a bar to drag and - / + buttons. Saved on release.
+  setting_popup:
+    hold_action:
+      action: none
+    tap_action:
+      action: javascript
+      javascript: |
+        [[[
+          if (!entity) return;
+          const id = entity.entity_id, domain = id.split('.')[0], a = entity.attributes;
+          const isTime = domain === 'input_datetime';
+          const title = (this._config && this._config.name) || a.friendly_name || id;
+          // Only one dialog at a time; closing it also drops its keyboard listener.
+          document.querySelectorAll('.mrtn-setting').forEach((e) => (e._close ? e._close() : e.remove()));
+
+          const el = (tag, css, text) => {
+            const e = document.createElement(tag);
+            if (css) e.style.cssText = css;
+            if (text !== undefined) e.textContent = text;
+            return e;
+          };
+          const btnCss = 'border:none;border-radius:10.4px;background:rgba(255,255,255,0.1);color:#fff;' +
+            'font:500 20px "Inter Variable",system-ui;cursor:pointer;touch-action:manipulation;' +
+            '-webkit-tap-highlight-color:transparent;';
+          const ov = el('div', 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.55);display:flex;' +
+            'align-items:center;justify-content:center;font-family:"Inter Variable",system-ui;color:#fff;');
+          ov.className = 'mrtn-setting';
+          const box = el('div', 'width:min(320px,92vw);max-height:96vh;overflow:auto;box-sizing:border-box;' +
+            'background:rgb(30,32,33);border-radius:16px;padding:12px 16px 16px;box-shadow:0 12px 40px rgba(0,0,0,0.5);');
+          ov.appendChild(box);
+          const head = el('div', 'display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;');
+          head.appendChild(el('div', 'font-size:16px;font-weight:500;color:rgba(255,255,255,0.8);', title));
+          const x = el('button', btnCss + 'width:36px;height:36px;font-size:18px;background:none;', '✕');
+          head.appendChild(x);
+          box.appendChild(head);
+          const big = el('div', 'font-size:40px;font-weight:600;text-align:center;margin:0 0 12px;' +
+            'font-variant-numeric:tabular-nums;letter-spacing:1px;');
+          box.appendChild(big);
+          let onKey = null;
+          const close = () => { ov.remove(); if (onKey) document.removeEventListener('keydown', onKey); };
+          ov._close = close;
+          x.addEventListener('click', close);
+          ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
+
+          if (isTime) {
+            // Typed digits fill HH:MM from the left; the first key replaces the current time.
+            const cur = String(entity.state).slice(0, 5);
+            let digits = '', fresh = true;
+            const parse = () => {
+              const d = digits.length === 3 ? '0' + digits : digits;
+              if (d.length !== 4) return null;
+              const h = +d.slice(0, 2), m = +d.slice(2);
+              return h < 24 && m < 60 ? d.slice(0, 2) + ':' + d.slice(2) : null;
+            };
+            const save = el('button', btnCss + 'height:44px;background:rgba(255,255,255,0.85);color:rgb(48,51,52);', '✓');
+            const render = () => {
+              if (fresh) { big.textContent = cur; big.style.color = '#fff'; }
+              else {
+                const p = (digits + '____').slice(0, 4);
+                big.textContent = p.slice(0, 2) + ':' + p.slice(2);
+                big.style.color = parse() ? '#fff' : 'rgba(255,255,255,0.6)';
+              }
+              save.disabled = !fresh && !parse();
+              save.style.opacity = save.disabled ? '0.4' : '1';
+            };
+            const press = (k) => {
+              if (k === 'del') { fresh = false; digits = digits.slice(0, -1); }
+              else if (k === 'ok') { const t = fresh ? cur : parse(); if (!t) return;
+                hass.callService('input_datetime', 'set_datetime', {entity_id: id, time: t + ':00'}); close(); return; }
+              else { if (fresh) { digits = ''; fresh = false; } if (digits.length < 4) digits += k; }
+              render();
+            };
+            const pad = el('div', 'display:grid;grid-template-columns:repeat(3,1fr);gap:8px;');
+            ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'del', '0', 'ok'].forEach((k) => {
+              if (k === 'ok') { pad.appendChild(save); return; }
+              const b = el('button', btnCss + 'height:44px;', k === 'del' ? '⌫' : k);
+              b.addEventListener('click', () => press(k));
+              pad.appendChild(b);
+            });
+            box.appendChild(pad);
+            save.addEventListener('click', () => press('ok'));
+            onKey = (e) => {
+              if (/^[0-9]$/.test(e.key)) press(e.key);
+              else if (e.key === 'Backspace') press('del');
+              else if (e.key === 'Enter') press('ok');
+              else if (e.key === 'Escape') close();
+              else return;
+              e.preventDefault();
+            };
+            document.addEventListener('keydown', onKey);
+            render();
+          } else {
+            const lo = Number(a.min), hi = Number(a.max), st = Number(a.step) || 1;
+            const unit = a.unit_of_measurement ? ' ' + a.unit_of_measurement : '';
+            let v = Number(entity.state);
+            const snap = (n) => Math.round(Math.max(lo, Math.min(hi, lo + Math.round((n - lo) / st) * st)) * 1000) / 1000;
+            const row = el('div', 'display:flex;align-items:center;gap:10px;');
+            const minus = el('button', btnCss + 'width:52px;height:52px;flex:none;font-size:26px;', '−');
+            const plus = el('button', btnCss + 'width:52px;height:52px;flex:none;font-size:26px;', '+');
+            const track = el('div', 'flex:1;height:52px;border-radius:10.4px;cursor:pointer;touch-action:none;');
+            row.appendChild(minus); row.appendChild(track); row.appendChild(plus);
+            box.appendChild(row);
+            const range = el('div', 'display:flex;justify-content:space-between;margin:6px 62px 0;font-size:13px;' +
+              'color:rgba(255,255,255,0.5);');
+            range.appendChild(el('span', '', lo + unit)); range.appendChild(el('span', '', hi + unit));
+            box.appendChild(range);
+            const render = () => {
+              const pc = (v - lo) / (hi - lo) * 100;
+              track.style.background = `linear-gradient(90deg, rgba(255,255,255,0.6) ${pc}%, rgba(255,255,255,0.1) ${pc}%)`;
+              big.textContent = v + unit;
+            };
+            const send = () => hass.callService(domain, 'set_value', {entity_id: id, value: v});
+            const at = (e) => { const r = track.getBoundingClientRect();
+              v = snap(lo + Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * (hi - lo)); render(); };
+            let drag = false;
+            track.addEventListener('pointerdown', (e) => { drag = true; try { track.setPointerCapture(e.pointerId); } catch (err) {} at(e); });
+            track.addEventListener('pointermove', (e) => { if (drag) at(e); });
+            track.addEventListener('pointerup', (e) => { if (!drag) return; drag = false; at(e); send(); });
+            track.addEventListener('pointercancel', () => { drag = false; });
+            minus.addEventListener('click', () => { v = snap(v - st); render(); send(); });
+            plus.addEventListener('click', () => { v = snap(v + st); render(); send(); });
+            onKey = (e) => { if (e.key === 'Escape') close(); };
+            document.addEventListener('keydown', onKey);
+            render();
+          }
+          document.body.appendChild(ov);
+        ]]]
+
+  # Slider for a setting (input_number / number / input_datetime with time only), drawn like
+  # fusion_slider: drag across the tile, the fill is the value. Settings have no use for the
+  # history of more-info, so tap and hold do nothing. Range and step come from the entity's own
+  # min/max/step; times go from 00:00 to 23:45 in steps of 15 min.
+  # Double width like the lights: add `view_layout: {grid-column: span 2}` where used.
+  fusion_range:
+    template: fusion_tile
+    variables:
+      iw: 61
+    tap_action:
+      action: none
+    hold_action:
+      action: none
+    state_display: |
+      [[[
+        if (!entity) return '';
+        const s = entity.state;
+        if (entity.entity_id.startsWith('input_datetime.')) return s.slice(0, 5);
+        const n = Number(s), u = entity.attributes.unit_of_measurement;
+        const v = isNaN(n) ? s : String(Math.round(n * 100) / 100);
+        return u ? `${v} ${u}` : v;
+      ]]]
+    custom_fields:
+      # Same pointer handling as fusion_slider (see the notes there). The range of this entity
+      # is baked into the handlers when the card renders.
+      slider: |
+        [[[
+          if (!entity) return '';
+          const id = entity.entity_id, domain = id.split('.')[0], t = domain === 'input_datetime';
+          const a = entity.attributes;
+          // variables.min / variables.max narrow the entity's own range (e.g. page zoom 50-200).
+          const lo = t ? 0 : Number(variables.min ?? a.min), hi = t ? 1425 : Number(variables.max ?? a.max), st = t ? 15 : (Number(a.step) || 1);
+          const unit = t ? '' : (a.unit_of_measurement ? ' ' + a.unit_of_measurement : '');
+          const fmt = t
+            ? `const f=String(Math.floor(v/60)).padStart(2,'0')+':'+String(v%60).padStart(2,'0');`
+            : `const f=v+'${unit}';`;
+          const calc = `const r=this.getBoundingClientRect();` +
+            `const q=Math.max(0,Math.min(1,(event.clientX-r.left)/r.width));` +
+            `let v=${lo}+Math.round(q*(${hi}-${lo})/${st})*${st};` +
+            `v=Math.round(Math.max(${lo},Math.min(${hi},v))*1000)/1000;` +
+            `const pc=(v-${lo})/(${hi}-${lo})*100;` + fmt;
+          const paint = `const root=this.getRootNode();const c=root.querySelector('ha-card');` +
+            `const at='calc(${variables.iw}px + (100% - ${variables.iw}px) * '+pc+' / 100)';` +
+            `c.style.background='linear-gradient(90deg, rgba(255,255,255,0.22) '+at+', rgba(0,0,0,0.15) '+at+')';` +
+            `const s=root.querySelector('#state');if(s)s.setAttribute('data-pv',f);`;
+          const call = t
+            ? `'input_datetime','set_datetime',{entity_id:'${id}',time:f+':00'}`
+            : `'${domain}','set_value',{entity_id:'${id}',value:v}`;
+          const send = `const h=this.getRootNode().host;` +
+            `(h.hass||document.querySelector('home-assistant').hass).callService(${call});`;
+          const now = t
+            ? `const p0=String(x.state).split(':');const p=((p0[0]*60+ +p0[1])-${lo})/(${hi}-${lo})*100;`
+            : `const p=(Number(x.state)-${lo})/(${hi}-${lo})*100;`;
+          const sync = `const root=tr.getRootNode();const s=root.querySelector('#state');if(s)s.removeAttribute('data-pv');` +
+            `const x=(root.host.hass||document.querySelector('home-assistant').hass).states['${id}'];if(!x)return;` + now +
+            `const at='calc(${variables.iw}px + (100% - ${variables.iw}px) * '+Math.max(0,Math.min(100,p))+' / 100)';` +
+            `root.querySelector('ha-card').style.background='linear-gradient(90deg, rgba(255,255,255,0.22) '+at+', rgba(0,0,0,0.15) '+at+')';`;
+          const down = `this._d=1;clearTimeout(this._t);const c0=this.getRootNode().querySelector('ha-card');` +
+            `this._bg=c0.style.background;` +
+            `try{this.setPointerCapture(event.pointerId)}catch(e){}` + calc + paint;
+          const move = `if(!this._d)return;` + calc + paint;
+          const up = `if(!this._d)return;this._d=0;event.stopPropagation();` + calc + paint + send +
+            `const tr=this;this._t=setTimeout(()=>{` + sync + `},5000);`;
+          const cancel = `if(!this._d)return;this._d=0;const c=this.getRootNode().querySelector('ha-card');` +
+            `c.style.background=this._bg;const s=this.getRootNode().querySelector('#state');if(s)s.removeAttribute('data-pv');`;
+          const stop = 'event.stopPropagation()';
+          return `<div class="track" onpointerdown="event.stopPropagation();${down}" onpointermove="${move}" ` +
+            `onpointerup="${up}" onpointercancel="${cancel}" onmousedown="${stop}" onmouseup="${stop}" ` +
+            `ontouchstart="${stop}" ontouchend="${stop}" onclick="${stop}" ondblclick="${stop}"></div>`;
+        ]]]
+    styles:
+      card:
+        - width: 393.6px
+        - background: |
+            [[[
+              if (!entity) return 'rgba(0, 0, 0, 0.15)';
+              const t = entity.entity_id.startsWith('input_datetime.'), a = entity.attributes;
+              const lo = t ? 0 : Number(variables.min ?? a.min), hi = t ? 1425 : Number(variables.max ?? a.max);
+              let cur = Number(entity.state);
+              if (t) { const p = String(entity.state).split(':'); cur = p[0] * 60 + +p[1]; }
+              const pct = Math.max(0, Math.min(100, (cur - lo) / (hi - lo) * 100)) || 0;
+              const at = `calc(${variables.iw}px + (100% - ${variables.iw}px) * ${pct} / 100)`;
+              return `linear-gradient(90deg, rgba(255, 255, 255, 0.22) ${at}, rgba(0, 0, 0, 0.15) ${at})`;
+            ]]]
+      img_cell:
+        - background: rgb(131, 129, 124)
+      custom_fields:
+        slider:
+          - position: absolute
+          - top: 0
+          - bottom: 0
+          - left: '[[[ return `${variables.iw}px`; ]]]'
+          - right: 0
+          - pointer-events: auto
+    extra_styles: |
+      #state[data-pv] { position: relative; visibility: hidden; }
+      #state[data-pv]::after { content: attr(data-pv); visibility: visible; position: absolute; inset: 0; }
+      .track {
+        width: 100%;
+        height: 100%;
+        cursor: pointer;
+        pointer-events: auto;
+        touch-action: pan-y;
+        -webkit-tap-highlight-color: transparent;
+      }
+
   # Tile for a boot-time timestamp sensor: shows "3d 4h" / "5h 12m".
   fusion_uptime:
     template: fusion_tile
@@ -1201,9 +1438,14 @@ views:
                         view_layout:
                           grid-column: span 2
                       - type: custom:button-card
-                        template: fusion_tile
+                        template: fusion_range
                         entity: number.touchkio_mrtn_hub_page_zoom
                         name: Page zoom
+                        variables:
+                          min: 50
+                          max: 200
+                        view_layout:
+                          grid-column: span 2
               - type: vertical-stack
                 cards:
                   - type: custom:button-card
@@ -2138,15 +2380,17 @@ views:
             layout: *tiles_layout
             cards:
               - type: custom:button-card
-                template: fusion_tile
+                template: [fusion_tile, setting_popup]
                 entity: input_datetime.luces_atenuar_hora
                 name: Dim from
               - type: custom:button-card
-                template: fusion_tile
+                template: fusion_range
                 entity: input_number.luces_atenuar_brillo
                 name: Dim to
+                view_layout:
+                  grid-column: span 2
               - type: custom:button-card
-                template: fusion_tile
+                template: [fusion_tile, setting_popup]
                 entity: input_datetime.luces_apagar_hora
                 name: Off at
               # Lights with the "Auto lights" label (the ones these automations control).

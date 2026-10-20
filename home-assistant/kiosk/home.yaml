@@ -83,6 +83,25 @@ button_card_templates:
     extra_styles: |
       :host { max-width: none !important; flex: 1 1 auto !important; }
 
+  # Settings (input_number / input_datetime) as a slider instead of a tile that opens the history.
+  desk_range:
+    template: fusion_range
+    variables:
+      iw: 76
+    styles: *desk_tile_styles
+    extra_styles: |
+      :host { max-width: none !important; flex: 1 1 auto !important; }
+      #state[data-pv] { position: relative; visibility: hidden; }
+      #state[data-pv]::after { content: attr(data-pv); visibility: visible; position: absolute; inset: 0; }
+      .track {
+        width: 100%;
+        height: 100%;
+        cursor: pointer;
+        pointer-events: auto;
+        touch-action: pan-y;
+        -webkit-tap-highlight-color: transparent;
+      }
+
   desk_time:
     template: desk_tile
     state_display: |
@@ -2118,15 +2137,17 @@ views:
             layout: *tiles_layout
             cards:
               - type: custom:button-card
-                template: desk_tile
+                template: [desk_tile, setting_popup]
                 entity: input_datetime.luces_atenuar_hora
                 name: Dim from
               - type: custom:button-card
-                template: desk_tile
+                template: desk_range
                 entity: input_number.luces_atenuar_brillo
                 name: Dim to
+                view_layout:
+                  grid-column: span 2
               - type: custom:button-card
-                template: desk_tile
+                template: [desk_tile, setting_popup]
                 entity: input_datetime.luces_apagar_hora
                 name: Off at
               # Lights with the "Auto lights" label (the ones these automations control).
@@ -2196,23 +2217,27 @@ views:
             layout: *tiles_layout
             cards:
               - type: custom:button-card
-                template: desk_tile
+                template: [desk_tile, setting_popup]
                 entity: input_datetime.kiosk_noche_inicio
                 name: Night from
               - type: custom:button-card
-                template: desk_tile
+                template: desk_range
                 entity: input_number.kiosk_brillo_noche
                 name: Night brightness
+                view_layout:
+                  grid-column: span 2
               - type: custom:button-card
-                template: desk_tile
+                template: [desk_tile, setting_popup]
                 entity: input_datetime.kiosk_dia_inicio
                 name: Day from
               - type: custom:button-card
-                template: desk_tile
+                template: desk_range
                 entity: input_number.kiosk_brillo_dia
                 name: Day brightness
+                view_layout:
+                  grid-column: span 2
               - type: custom:button-card
-                template: desk_tile
+                template: [desk_tile, setting_popup]
                 entity: input_number.kiosk_inactividad_min
                 name: Back to Overview
               - type: custom:button-card
