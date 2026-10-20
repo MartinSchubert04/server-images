@@ -102,6 +102,12 @@ group:
       - input_number.kiosk_media_ancho
       - input_number.kiosk_media_alto
 
+# La cola de Haze (lista de canciones del kiosco) pesa decenas de KB: no se guarda en la base.
+recorder:
+  exclude:
+    entity_globs:
+      - sensor.haze_*_cola
+
 automation:
   # Lista de Haze para input_select.kiosk_haze: un Haze nuevo aparece solo al crearse sus entidades
   # por MQTT discovery. Sale del registro (integration_entities), no de los estados, porque al
