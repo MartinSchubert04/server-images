@@ -2348,28 +2348,45 @@ views:
           - type: custom:button-card
             template: fusion_title
             name: Kiosk
+          # Two fixed columns: brightness bars on the left, times and timers (tap to set) on the
+          # right. Each row pairs related settings.
           - type: custom:layout-card
             layout_type: custom:grid-layout
-            layout: *tiles_layout
+            layout:
+              <<: *tiles_layout
+              grid-template-columns: 393.6px 192px
+              grid-column-gap: 50px
             cards:
               - type: custom:button-card
-                template: fusion_tile
-                entity: input_datetime.kiosk_noche_inicio
-                name: Night from
-              - type: custom:button-card
-                template: fusion_tile
+                template: fusion_range
                 entity: input_number.kiosk_brillo_noche
                 name: Night brightness
               - type: custom:button-card
-                template: fusion_tile
-                entity: input_datetime.kiosk_dia_inicio
-                name: Day from
+                template: [fusion_tile, setting_popup]
+                entity: input_datetime.kiosk_noche_inicio
+                name: Night from
               - type: custom:button-card
-                template: fusion_tile
+                template: fusion_range
                 entity: input_number.kiosk_brillo_dia
                 name: Day brightness
               - type: custom:button-card
-                template: fusion_tile
+                template: [fusion_tile, setting_popup]
+                entity: input_datetime.kiosk_dia_inicio
+                name: Day from
+              - type: custom:button-card
+                template: fusion_range
+                entity: input_number.kiosk_brillo_atenuado
+                name: Idle brightness
+              - type: custom:button-card
+                template: [fusion_tile, setting_popup]
+                entity: input_number.kiosk_atenuar_min
+                name: Dim after
+              - type: custom:button-card
+                template: fusion_range
+                entity: input_number.kiosk_brillo_atenuado_noche
+                name: Idle at night
+              - type: custom:button-card
+                template: [fusion_tile, setting_popup]
                 entity: input_number.kiosk_inactividad_min
                 name: Back to Overview
           - type: custom:button-card

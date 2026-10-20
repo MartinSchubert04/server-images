@@ -33,33 +33,67 @@ input_number:
   kiosk_brillo_noche:
     name: "Kiosco: brillo de noche"
     icon: mdi:brightness-4
-    min: 5
+    min: 1
     max: 100
-    step: 5
+    step: 1
     unit_of_measurement: "%"
     mode: slider
   kiosk_brillo_dia:
     name: "Kiosco: brillo de día"
     icon: mdi:brightness-7
-    min: 5
+    min: 1
     max: 100
-    step: 5
+    step: 1
     unit_of_measurement: "%"
     mode: slider
   kiosk_inactividad_min:
     name: "Kiosco: volver a Overview tras"
+    icon: mdi:timer-sand
+    min: 5
+    max: 60
+    step: 1
+    unit_of_measurement: "min"
+    mode: slider
+  # Pantalla sin toques: tras kiosk_atenuar_min baja a kiosk_brillo_atenuado, o de noche
+  # (de kiosk_noche_inicio a kiosk_dia_inicio) a kiosk_brillo_atenuado_noche. Al tocarla vuelve.
+  kiosk_atenuar_min:
+    name: "Kiosco: atenuar tras"
     icon: mdi:timer-sand
     min: 1
     max: 60
     step: 1
     unit_of_measurement: "min"
     mode: slider
+  kiosk_brillo_atenuado:
+    name: "Kiosco: brillo sin uso"
+    icon: mdi:brightness-5
+    min: 1
+    max: 100
+    step: 1
+    unit_of_measurement: "%"
+    mode: slider
+  kiosk_brillo_atenuado_noche:
+    name: "Kiosco: brillo sin uso de noche"
+    icon: mdi:brightness-3
+    min: 1
+    max: 100
+    step: 1
+    unit_of_measurement: "%"
+    mode: slider
+  # Lo usa la automatización de brillo: el brillo (0-255) de antes de atenuar, para volver a él.
+  kiosk_brillo_previo:
+    name: "Kiosco: brillo antes de atenuar"
+    icon: mdi:brightness-auto
+    min: 1
+    max: 255
+    step: 1
+    mode: box
   luces_atenuar_brillo:
     name: "Luces: brillo atenuado"
     icon: mdi:brightness-6
-    min: 5
+    min: 1
     max: 100
-    step: 5
+    step: 1
     unit_of_measurement: "%"
     mode: slider
   # Tamaño de la tarjeta Media en tiles de la grilla (192 × 96 px cada uno): ancho × alto.
@@ -85,6 +119,12 @@ input_number:
 # Cada opción es el prefijo de las entidades de un Haze ("haze_pc" → sensor.haze_pc_estado, ...).
 # La automatización kiosk_haze_opciones rearma la lista con los Haze que existan, con haze_mrtn_main
 # primero: es la opción por defecto cuando no hay ninguna elegida.
+# Encendido mientras la pantalla está atenuada por falta de uso (lo maneja kiosk_brillo_nocturno).
+input_boolean:
+  kiosk_atenuado:
+    name: "Kiosco: pantalla atenuada"
+    icon: mdi:brightness-5
+
 input_select:
   kiosk_haze:
     name: "Haze"
@@ -135,24 +175,110 @@ automation:
         data:
           options: "{{ haze }}"
 
-  # Brillo de la pantalla del kiosco según la hora
+  # Brillo de la pantalla del kiosco según la hora y si alguien la usa.
+  # - A las horas de kiosk_noche_inicio / kiosk_dia_inicio pone el brillo de noche / de día.
+  # - Tras kiosk_atenuar_min sin toques guarda el brillo que tenía (kiosk_brillo_previo) y baja a
+  #   brillo sin uso, o de noche (de kiosk_noche_inicio a kiosk_dia_inicio) a brillo sin uso de noche.
+  # - Al tocarla vuelve al brillo guardado, el de justo antes de atenuarse (aunque fuera a mano).
+  #   Si mientras estaba atenuada pasa la hora de noche/día, al tocarla vuelve al brillo de la hora nueva.
+  # kiosk_atenuado marca que el brillo actual es el atenuado: así, si se repite el disparo (la Pi
+  # se reconecta y last_active pasa por "unknown"), no se guarda el brillo atenuado como el previo.
+  # last_active son los minutos desde el último toque: TouchKio lo pone en 0 al tocar.
   - id: kiosk_brillo_nocturno
-    alias: "Kiosco: brillo de noche y de día"
-    mode: single
+    alias: "Kiosco: brillo según hora y uso"
+    mode: queued
     trigger:
       - platform: time
         at: input_datetime.kiosk_noche_inicio
-        id: noche
+        id: horario
       - platform: time
         at: input_datetime.kiosk_dia_inicio
-        id: dia
+        id: horario
+      - platform: template
+        value_template: >-
+          {% set m = states('sensor.touchkio_mrtn_hub_last_active') %}
+          {{ m | is_number and m | int >= states('input_number.kiosk_atenuar_min') | int(5) }}
+        id: sin_uso
+      - platform: template
+        value_template: >-
+          {% set m = states('sensor.touchkio_mrtn_hub_last_active') %}
+          {{ m | is_number and m | int < states('input_number.kiosk_atenuar_min') | int(5) }}
+        id: en_uso
+    variables:
+      pantalla: light.touchkio_mrtn_hub_display
+      atenuado: "{{ is_state('input_boolean.kiosk_atenuado', 'on') }}"
+      noche: >-
+        {% set ahora = now().strftime('%H:%M:%S') %}
+        {% set desde = states('input_datetime.kiosk_noche_inicio') %}
+        {% set hasta = states('input_datetime.kiosk_dia_inicio') %}
+        {{ (ahora >= desde or ahora < hasta) if desde > hasta else (desde <= ahora < hasta) }}
+      brillo_hora: "{{ states('input_number.kiosk_brillo_noche' if noche else 'input_number.kiosk_brillo_dia') | int(50) }}"
+      brillo_sin_uso: "{{ states('input_number.kiosk_brillo_atenuado_noche' if noche else 'input_number.kiosk_brillo_atenuado') | int(5) }}"
     action:
-      - service: light.turn_on
-        target:
-          entity_id: light.touchkio_mrtn_hub_display
-        data:
-          brightness_pct: >-
-            {{ states('input_number.kiosk_brillo_noche' if trigger.id == 'noche' else 'input_number.kiosk_brillo_dia') | int(50) }}
+      - choose:
+          # Sin uso: guardar el brillo actual (0-255, sin redondear) y atenuar
+          - conditions:
+              - condition: trigger
+                id: sin_uso
+              - condition: template
+                value_template: "{{ not atenuado and is_state(pantalla, 'on') }}"
+            sequence:
+              - service: input_number.set_value
+                target:
+                  entity_id: input_number.kiosk_brillo_previo
+                data:
+                  value: "{{ [state_attr(pantalla, 'brightness') | int(0), 1] | max }}"
+              - service: input_boolean.turn_on
+                target:
+                  entity_id: input_boolean.kiosk_atenuado
+              - service: light.turn_on
+                target:
+                  entity_id: "{{ pantalla }}"
+                data:
+                  brightness_pct: "{{ brillo_sin_uso }}"
+          # La tocaron: volver al brillo guardado
+          - conditions:
+              - condition: trigger
+                id: en_uso
+              - condition: template
+                value_template: "{{ atenuado }}"
+            sequence:
+              - service: input_boolean.turn_off
+                target:
+                  entity_id: input_boolean.kiosk_atenuado
+              - service: light.turn_on
+                target:
+                  entity_id: "{{ pantalla }}"
+                data:
+                  brightness: "{{ states('input_number.kiosk_brillo_previo') | int(128) }}"
+          # Cambio de noche/día con la pantalla atenuada: queda atenuada (al nivel de la hora
+          # nueva) y al tocarla vuelve al brillo de la hora nueva
+          - conditions:
+              - condition: trigger
+                id: horario
+              - condition: template
+                value_template: "{{ atenuado }}"
+            sequence:
+              - service: input_number.set_value
+                target:
+                  entity_id: input_number.kiosk_brillo_previo
+                data:
+                  value: "{{ [(brillo_hora * 2.55) | round(0) | int, 1] | max }}"
+              - service: light.turn_on
+                target:
+                  entity_id: "{{ pantalla }}"
+                data:
+                  brightness_pct: "{{ brillo_sin_uso }}"
+          # Cambio de noche/día con la pantalla en uso
+          - conditions:
+              - condition: trigger
+                id: horario
+            sequence:
+              - service: light.turn_on
+                target:
+                  entity_id: "{{ pantalla }}"
+                data:
+                  brightness_pct: "{{ brillo_hora }}"
 
   # Si nadie toca la pantalla un rato, el kiosco vuelve a su página de inicio (Overview).
   # last_active son los minutos desde el último toque; dispara una vez al pasar el umbral.
