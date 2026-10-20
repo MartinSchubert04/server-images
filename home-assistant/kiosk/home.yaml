@@ -1313,6 +1313,34 @@ views:
                       .cpu i { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(255, 255, 255, 0.16); }
                       .cpu em { position: relative; padding-left: 8px; font-style: normal; font-size: 13.5px; line-height: 22px; font-variant-numeric: tabular-nums; }
                       .mem { text-align: right; color: rgba(255, 255, 255, 0.7); font-variant-numeric: tabular-nums; }
+                  - type: custom:button-card
+                    template: desk_title_next
+                    name: Hub processes
+                  - type: custom:button-card
+                    template: desk_panel
+                    entity: sensor.hub_procesos
+                    custom_fields:
+                      c: |
+                        [[[
+                          const esc = (v) => String(v).replace(/[&<>"]/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+                          const ps = entity.attributes.procs || [];
+                          const top = Math.max(1, ...ps.map((p) => p.cpu));
+                          const mb = (b) => b >= 1073741824 ? `${(b / 1073741824).toFixed(1)} GB` : `${Math.round(b / 1048576)} MB`;
+                          return `<div class="row hd"><span>Process</span><span>CPU</span><span>Memory</span></div>` + ps.map((p) =>
+                            `<div class="row"><span class="pn">${esc(p.nombre)}${p.n > 1 ? `<small>×${p.n}</small>` : ''}</span>` +
+                            `<span class="cpu"><i style="width:${(p.cpu / top * 100).toFixed(0)}%"></i><em>${p.cpu} %</em></span>` +
+                            `<span class="mem">${mb(p.mem)}</span></div>`).join('');
+                        ]]]
+                    extra_styles: |
+                      .row { display: grid; grid-template-columns: minmax(0, 1fr) 150px 80px; gap: 14px; align-items: center; height: 38px; font-size: 15px; }
+                      .row + .row { border-top: 1px solid rgba(255, 255, 255, 0.06); }
+                      .hd { height: 26px; font-size: 13px; color: rgba(255, 255, 255, 0.45); }
+                      .pn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+                      .pn small { margin-left: 6px; color: rgba(255, 255, 255, 0.45); }
+                      .cpu { position: relative; height: 22px; border-radius: 5px; background: rgba(255, 255, 255, 0.05); overflow: hidden; }
+                      .cpu i { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(255, 255, 255, 0.16); }
+                      .cpu em { position: relative; padding-left: 8px; font-style: normal; font-size: 13.5px; line-height: 22px; font-variant-numeric: tabular-nums; }
+                      .mem { text-align: right; color: rgba(255, 255, 255, 0.7); font-variant-numeric: tabular-nums; }
                   # The container HA runs in (System Monitor)
                   - type: custom:button-card
                     template: desk_title_next

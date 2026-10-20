@@ -335,9 +335,22 @@ rest:
           - procs
           - discos
 
+  # consumo-pc también corre en el hub (servicio de usuario en ~/consumo-pc, lee cada 10 s)
+  - resource: http://192.168.0.40:8787/api/live
+    scan_interval: 15
+    timeout: 8
+    sensor:
+      - name: "Hub procesos"
+        unique_id: consumo_hub_procesos
+        icon: mdi:format-list-bulleted
+        value_template: "{{ value_json.procs[0].nombre if value_json.procs else 'sin datos' }}"
+        json_attributes:
+          - procs
+
 # Listas que cambian en cada lectura: guardarlas solo engordaría la base
 recorder:
   exclude:
     entities:
       - sensor.server_procesos
       - sensor.server_cpu_nucleos
+      - sensor.hub_procesos
