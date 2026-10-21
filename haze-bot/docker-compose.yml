@@ -1,0 +1,18 @@
+name: haze-bot
+
+# Haze como bot de Discord: /play en un canal de voz. El codigo esta en Haze/apps/server.
+services:
+  haze-bot:
+    build:
+      context: ../../Haze
+      dockerfile: apps/server/Dockerfile
+    image: haze-bot
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+    environment:
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - TZ=${TZ:-America/Argentina/Buenos_Aires}
+    restart: unless-stopped

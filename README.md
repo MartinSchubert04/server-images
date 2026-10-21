@@ -20,6 +20,7 @@ levanta con `docker compose up -d` desde adentro.
 | `kopia` | Kopia | 51515 | Backups |
 | `monitoring` | Dozzle | 8080 | Logs en vivo de todos los contenedores |
 | `monitoring` | Beszel | 8090 | Métricas del server y los contenedores, con alertas |
+| `haze-bot` | Haze para Discord | — | Bot de música (`/play`). Se arma desde `../Haze`: `docker compose up -d --build` para actualizarlo |
 
 ## Levantar desde cero
 
