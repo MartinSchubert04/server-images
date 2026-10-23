@@ -89,7 +89,7 @@ input_number:
     step: 1
     unit_of_measurement: "%"
     mode: slider
-  # Lo usa la automatización de brillo: el brillo (0-255) de antes de atenuar, para volver a él.
+  # El brillo (0-255) al que vuelve la pantalla al tocarla: el de antes de atenuarla o apagarla.
   kiosk_brillo_previo:
     name: "Kiosco: brillo antes de atenuar"
     icon: mdi:brightness-auto
@@ -267,6 +267,24 @@ automation:
                   entity_id: "{{ pantalla }}"
                 data:
                   brightness: "{{ states('input_number.kiosk_brillo_previo') | int(128) }}"
+          # Cambio de noche/día con la pantalla apagada: no prenderla. Si la apagó la falta de uso,
+          # al tocarla vuelve con el brillo de la hora nueva; si se apagó a mano, no se toca.
+          - conditions:
+              - condition: trigger
+                id: horario
+              - condition: template
+                value_template: "{{ not is_state(pantalla, 'on') }}"
+            sequence:
+              - if:
+                  - condition: state
+                    entity_id: input_boolean.kiosk_apagado
+                    state: "on"
+                then:
+                  - service: input_number.set_value
+                    target:
+                      entity_id: input_number.kiosk_brillo_previo
+                    data:
+                      value: "{{ [(brillo_hora * 2.55) | round(0) | int, 1] | max }}"
           # Cambio de noche/día con la pantalla atenuada: queda atenuada (al nivel de la hora
           # nueva) y al tocarla vuelve al brillo de la hora nueva
           - conditions:
@@ -298,8 +316,9 @@ automation:
 
   # Apaga la pantalla del kiosco tras kiosk_apagar_min sin toques (0 = nunca) y la prende al tocarla.
   # Si estaba atenuada, al tocarla la vuelve a prender kiosk_brillo_nocturno con el brillo guardado;
-  # si no, se prende acá con el brillo que tenía. kiosk_apagado marca que la apagó esta automatización,
-  # así no prende una pantalla que se apagó a mano.
+  # si no, se prende acá con kiosk_brillo_previo: el que tenía al apagarse, o el de la hora nueva si
+  # mientras estaba apagada pasó la hora de noche/día. kiosk_apagado marca que la apagó esta
+  # automatización, así no prende una pantalla que se apagó a mano.
   - id: kiosk_apagar_pantalla
     alias: "Kiosco: apagar pantalla sin uso"
     mode: queued
@@ -325,6 +344,17 @@ automation:
               - condition: template
                 value_template: "{{ is_state(pantalla, 'on') }}"
             sequence:
+              # Atenuada: el brillo de antes de atenuar ya está guardado
+              - if:
+                  - condition: state
+                    entity_id: input_boolean.kiosk_atenuado
+                    state: "off"
+                then:
+                  - service: input_number.set_value
+                    target:
+                      entity_id: input_number.kiosk_brillo_previo
+                    data:
+                      value: "{{ [state_attr(pantalla, 'brightness') | int(0), 1] | max }}"
               - service: input_boolean.turn_on
                 target:
                   entity_id: input_boolean.kiosk_apagado
@@ -350,6 +380,8 @@ automation:
                   - service: light.turn_on
                     target:
                       entity_id: "{{ pantalla }}"
+                    data:
+                      brightness: "{{ states('input_number.kiosk_brillo_previo') | int(128) }}"
 
   # Si nadie toca la pantalla un rato, el kiosco vuelve a su página de inicio (Overview).
   # last_active son los minutos desde el último toque; dispara una vez al pasar el umbral.
