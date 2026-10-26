@@ -87,3 +87,11 @@ sections:
         description: Solo por Tailscale
         icon: fas fa-display
         url: http://mrtn-server.tailbce521.ts.net:6080
+
+  - name: Finanzas
+    icon: fas fa-chart-line
+    items:
+      - title: Quant Bot
+        description: Bot de inversión (paper) · Solo por Tailscale
+        icon: fas fa-chart-line
+        url: http://mrtn-server.tailbce521.ts.net:8788
