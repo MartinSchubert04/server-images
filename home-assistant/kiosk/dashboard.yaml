@@ -335,6 +335,260 @@ button_card_templates:
           document.body.appendChild(ov);
         ]]]
 
+  # Schedule editor for the kiosk screen brightness or the Auto lights. The tile shows the schedule
+  # that is on now, with an icon for its time of day. Tap opens a dialog that lists every time with
+  # its brightness (kiosk: also the brightness when nobody touches it; lights: 0 = off): drag a bar
+  # to change it, tap a time to type it, ✕ removes, "+ Add time" adds one. Nothing is saved until Save.
+  # The list lives in an input_text as "HH:MM=value;..." (packages/kiosk.yaml reads it):
+  #   kiosk: "07:00=60/5;23:00=5/1" (brightness/idle)   lights: "22:00=40;00:00=0"
+  # Use: `template: [fusion_tile, schedule_popup]`, entity = that input_text, variables: {kind: kiosk | lights}.
+  schedule_popup:
+    variables:
+      kind: kiosk
+      # Shared helpers (the tile and the dialog both need them).
+      sched: |
+        [[[
+          const p2 = (n) => String(n).padStart(2, '0');
+          const parse = (s) => String(s || '').split(';').map((x) => x.split('='))
+            .filter((x) => x.length === 2 && /^\d{2}:\d{2}$/.test(x[0]))
+            .map(([t, v]) => {
+              const n = v.split('/').map(Number);
+              return {t, b: n[0] || 0, a: n.length > 1 ? n[1] || 0 : n[0] || 0};
+            })
+            .sort((x, y) => (x.t < y.t ? -1 : 1));
+          const now = () => { const d = new Date(); return p2(d.getHours()) + ':' + p2(d.getMinutes()); };
+          // The one on now: the last that already started today, or else the last one (from yesterday).
+          const current = (l) => { const n = now(); const b = l.filter((e) => e.t <= n); return b.length ? b[b.length - 1] : l[l.length - 1]; };
+          const icon = (t) => {
+            const h = +t.slice(0, 2);
+            return h < 5 ? 'mdi:moon-waning-crescent' : h < 8 ? 'mdi:weather-sunset-up' : h < 17 ? 'mdi:weather-sunny'
+              : h < 20 ? 'mdi:weather-sunset-down' : 'mdi:weather-night';
+          };
+          return {p2, parse, now, current, icon};
+        ]]]
+    hold_action:
+      action: none
+    # The schedule on now changes with the clock: repaint every minute.
+    triggers_update: sensor.kiosk_hora
+    icon: |
+      [[[
+        const S = variables.sched, l = S.parse(entity && entity.state);
+        return l.length ? S.icon(S.current(l).t) : 'mdi:clock-outline';
+      ]]]
+    state_display: |
+      [[[
+        const S = variables.sched, l = S.parse(entity && entity.state);
+        if (!l.length) return 'No times';
+        const c = S.current(l);
+        return `${variables.kind === 'lights' && !c.b ? 'Off' : c.b + ' %'} since ${c.t}`;
+      ]]]
+    tap_action:
+      action: javascript
+      javascript: |
+        [[[
+          if (!entity) return;
+          const S = variables.sched, lights = variables.kind === 'lights', id = entity.entity_id;
+          const title = (this._config && this._config.name) || entity.attributes.friendly_name || id;
+          const MAX = 12;
+          document.querySelectorAll('.mrtn-setting').forEach((e) => (e._close ? e._close() : e.remove()));
+
+          const el = (tag, css, text) => {
+            const e = document.createElement(tag);
+            if (css) e.style.cssText = css;
+            if (text !== undefined) e.textContent = text;
+            return e;
+          };
+          const btnCss = 'border:none;border-radius:10.4px;background:rgba(255,255,255,0.1);color:#fff;' +
+            'font:500 17px "Inter Variable",system-ui;cursor:pointer;touch-action:manipulation;' +
+            '-webkit-tap-highlight-color:transparent;';
+          const mainCss = 'background:rgba(255,255,255,0.85);color:rgb(48,51,52);';
+
+          // Rows being edited: {t: "HH:MM", b: brightness, a: idle brightness (kiosk)}.
+          const enc = (l) => l.map((r) => r.t + '=' + (lights ? r.b : r.b + '/' + r.a)).join(';');
+          let rows = S.parse(entity.state);
+          const saved = enc(rows);
+          if (!rows.length && !lights) rows = [{t: '07:00', b: 60, a: 5}];
+          const sort = () => rows.sort((x, y) => (x.t < y.t ? -1 : 1));
+
+          const ov = el('div', 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.55);display:flex;' +
+            'align-items:center;justify-content:center;font-family:"Inter Variable",system-ui;color:#fff;');
+          ov.className = 'mrtn-setting';
+          const box = el('div', 'width:min(600px,96vw);max-height:96vh;display:flex;flex-direction:column;box-sizing:border-box;' +
+            'background:rgb(30,32,33);border-radius:16px;padding:10px 14px 14px;box-shadow:0 12px 40px rgba(0,0,0,0.5);');
+          ov.appendChild(box);
+          const head = el('div', 'display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex:none;');
+          head.appendChild(el('div', 'font-size:17px;font-weight:600;color:rgba(255,255,255,0.85);', title));
+          const x = el('button', btnCss + 'width:40px;height:40px;background:none;', '✕');
+          head.appendChild(x);
+          box.appendChild(head);
+          const body = el('div', 'flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;');
+          box.appendChild(body);
+          const foot = el('div', 'display:flex;align-items:center;gap:8px;margin-top:12px;flex:none;');
+          box.appendChild(foot);
+
+          let onKey = null;
+          const close = () => { ov.remove(); document.removeEventListener('keydown', keys); };
+          ov._close = close;
+          x.addEventListener('click', close);
+          // A tap outside closes only when nothing changed (no losing edits by accident).
+          ov.addEventListener('click', (e) => { if (e.target === ov && enc(rows) === saved) close(); });
+          const keys = (e) => { if (onKey) onKey(e); };
+          document.addEventListener('keydown', keys);
+
+          // Bar to drag (or tap) a value; the value is written inside it.
+          const bar = (row, key, lo, hi, st, fmt, changed) => {
+            const b = el('div', 'height:44px;border-radius:10.4px;cursor:pointer;touch-action:none;user-select:none;' +
+              'display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:500;' +
+              'font-variant-numeric:tabular-nums;-webkit-tap-highlight-color:transparent;');
+            const paint = () => {
+              const pc = (row[key] - lo) / (hi - lo) * 100;
+              b.style.background = `linear-gradient(90deg, rgba(255,255,255,0.32) ${pc}%, rgba(255,255,255,0.07) ${pc}%)`;
+              b.textContent = fmt(row[key]);
+            };
+            const at = (e) => {
+              const r = b.getBoundingClientRect(), q = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+              const v = Math.max(lo, Math.min(hi, lo + Math.round(q * (hi - lo) / st) * st));
+              if (v !== row[key]) { row[key] = v; paint(); changed(); }
+            };
+            let drag = false;
+            b.addEventListener('pointerdown', (e) => { drag = true; try { b.setPointerCapture(e.pointerId); } catch (err) {} at(e); });
+            b.addEventListener('pointermove', (e) => { if (drag) at(e); });
+            b.addEventListener('pointerup', (e) => { if (drag) { drag = false; at(e); } });
+            b.addEventListener('pointercancel', () => { drag = false; });
+            paint();
+            return b;
+          };
+
+          const cols = lights ? '36px 84px minmax(0,1fr) 40px' : '36px 84px minmax(0,1fr) minmax(0,1fr) 40px';
+          const list = () => {
+            onKey = (e) => { if (e.key === 'Escape') close(); };
+            body.textContent = '';
+            foot.textContent = '';
+            const grid = el('div', `display:grid;grid-template-columns:${cols};gap:8px;align-items:center;`);
+            const lab = (t) => el('div', 'font-size:13px;color:rgba(255,255,255,0.5);text-align:center;', t);
+            [' ', 'From', 'Brightness'].concat(lights ? [] : ['When idle'], [' ']).forEach((t) => grid.appendChild(lab(t)));
+            const save = el('button', btnCss + mainCss + 'height:44px;padding:0 22px;', 'Save');
+            const cancel = el('button', btnCss + 'height:44px;padding:0 18px;', 'Cancel');
+            const changed = () => {
+              const same = enc(rows) === saved;
+              save.disabled = same;
+              save.style.opacity = same ? '0.4' : '1';
+            };
+            rows.forEach((r, i) => {
+              const ic = el('ha-icon', 'justify-self:center;--mdc-icon-size:24px;color:rgba(255,255,255,0.8);');
+              ic.setAttribute('icon', lights && !r.b ? 'mdi:lightbulb-off-outline' : S.icon(r.t));
+              grid.appendChild(ic);
+              const tb = el('button', btnCss + 'height:44px;font-size:18px;font-variant-numeric:tabular-nums;', r.t);
+              tb.addEventListener('click', () => pad(i, false));
+              grid.appendChild(tb);
+              if (lights) {
+                grid.appendChild(bar(r, 'b', 0, 100, 5, (v) => (v ? v + ' %' : 'Off'), () => {
+                  ic.setAttribute('icon', r.b ? S.icon(r.t) : 'mdi:lightbulb-off-outline'); changed();
+                }));
+              } else {
+                grid.appendChild(bar(r, 'b', 1, 100, 1, (v) => v + ' %', changed));
+                grid.appendChild(bar(r, 'a', 1, 100, 1, (v) => v + ' %', changed));
+              }
+              // The kiosk always needs one (its brightness has to come from somewhere).
+              const only = !lights && rows.length === 1;
+              const del = el('button', btnCss + 'height:44px;background:none;color:rgba(255,255,255,0.6);' +
+                (only ? 'opacity:0.25;' : ''), '✕');
+              del.disabled = only;
+              del.addEventListener('click', () => { rows.splice(i, 1); list(); });
+              grid.appendChild(del);
+            });
+            body.appendChild(grid);
+            if (!rows.length) {
+              body.appendChild(el('div', 'padding:18px 0 6px;text-align:center;font-size:15px;color:rgba(255,255,255,0.5);',
+                'No times: the lights are left alone.'));
+            }
+
+            const add = el('button', btnCss + 'height:44px;padding:0 16px;margin-right:auto;', '+ Add time');
+            if (rows.length >= MAX) { add.disabled = true; add.style.opacity = '0.4'; }
+            add.addEventListener('click', () => {
+              // First free whole hour from now on.
+              let h = new Date().getHours();
+              const used = (t) => rows.some((r) => r.t === t);
+              for (let k = 0; k < 24 && used(S.p2(h) + ':00'); k++) h = (h + 1) % 24;
+              rows.push({t: S.p2(h) + ':00', b: lights ? 40 : 50, a: 5});
+              pad(rows.length - 1, true);
+            });
+            cancel.addEventListener('click', close);
+            save.addEventListener('click', () => {
+              if (save.disabled) return;
+              hass.callService('input_text', 'set_value', {entity_id: id, value: enc(rows)});
+              close();
+            });
+            foot.appendChild(add); foot.appendChild(cancel); foot.appendChild(save);
+            changed();
+          };
+
+          // Keypad for a row's time. Typed digits fill HH:MM from the left; the first key replaces it.
+          const pad = (i, isNew) => {
+            const cur = rows[i].t;
+            let digits = '', fresh = true;
+            body.textContent = '';
+            foot.textContent = '';
+            const big = el('div', 'font-size:44px;font-weight:600;text-align:center;margin:2px 0 4px;' +
+              'font-variant-numeric:tabular-nums;letter-spacing:1px;');
+            const hint = el('div', 'height:18px;text-align:center;font-size:13px;color:rgb(242,150,120);margin-bottom:6px;');
+            body.appendChild(big); body.appendChild(hint);
+            const parse = () => {
+              const d = digits.length === 3 ? '0' + digits : digits;
+              if (d.length !== 4) return null;
+              const h = +d.slice(0, 2), m = +d.slice(2);
+              return h < 24 && m < 60 ? d.slice(0, 2) + ':' + d.slice(2) : null;
+            };
+            const value = () => (fresh ? cur : parse());
+            const taken = (t) => rows.some((r, k) => k !== i && r.t === t);
+            const ok = el('button', btnCss + mainCss + 'height:46px;', '✓');
+            const render = () => {
+              if (fresh) big.textContent = cur;
+              else {
+                // 3 digits that already make a time (630 → 06:30) are shown as that time.
+                const p = digits.length === 3 && parse() ? '0' + digits : (digits + '____').slice(0, 4);
+                big.textContent = p.slice(0, 2) + ':' + p.slice(2);
+              }
+              const v = value();
+              big.style.color = v ? '#fff' : 'rgba(255,255,255,0.6)';
+              hint.textContent = v && taken(v) ? 'That time is already in the list' : '';
+              ok.disabled = !v || taken(v);
+              ok.style.opacity = ok.disabled ? '0.4' : '1';
+            };
+            const back = () => { if (isNew) rows.splice(i, 1); list(); };
+            const press = (k) => {
+              if (k === 'del') { fresh = false; digits = digits.slice(0, -1); }
+              else if (k === 'ok') { const v = value(); if (!v || taken(v)) return; rows[i].t = v; sort(); list(); return; }
+              else { if (fresh) { digits = ''; fresh = false; } if (digits.length < 4) digits += k; }
+              render();
+            };
+            const keypad = el('div', 'display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:340px;margin:0 auto;');
+            ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'del', '0', 'ok'].forEach((k) => {
+              if (k === 'ok') { keypad.appendChild(ok); return; }
+              const b = el('button', btnCss + 'height:46px;font-size:20px;', k === 'del' ? '⌫' : k);
+              b.addEventListener('click', () => press(k));
+              keypad.appendChild(b);
+            });
+            ok.addEventListener('click', () => press('ok'));
+            body.appendChild(keypad);
+            const bb = el('button', btnCss + 'height:44px;padding:0 18px;margin:0 auto;', isNew ? 'Cancel' : 'Back');
+            bb.addEventListener('click', back);
+            foot.appendChild(bb);
+            onKey = (e) => {
+              if (/^[0-9]$/.test(e.key)) press(e.key);
+              else if (e.key === 'Backspace') press('del');
+              else if (e.key === 'Enter') press('ok');
+              else if (e.key === 'Escape') back();
+              else return;
+              e.preventDefault();
+            };
+            render();
+          };
+
+          list();
+          document.body.appendChild(ov);
+        ]]]
+
   # Slider for a setting (input_number / number / input_datetime with time only), drawn like
   # fusion_slider: drag across the tile, the fill is the value. Settings have no use for the
   # history of more-info, so tap and hold do nothing. Range and step come from the entity's own
@@ -2575,56 +2829,31 @@ views:
           - type: custom:button-card
             template: fusion_title
             name: Kiosk
-          # Two fixed columns: brightness bars on the left, times and timers (tap to set) on the
-          # right. Each row pairs related settings.
+          # Screen brightness by time of day (opens the schedule dialog), then the timers.
           - type: custom:layout-card
             layout_type: custom:grid-layout
-            layout:
-              <<: *tiles_layout
-              grid-template-columns: 393.6px 192px
-              grid-column-gap: 50px
+            layout: *tiles_layout
             cards:
               - type: custom:button-card
-                template: fusion_range
-                entity: input_number.kiosk_brillo_noche
-                name: Night brightness
-              - type: custom:button-card
-                template: [fusion_tile, setting_popup]
-                entity: input_datetime.kiosk_noche_inicio
-                name: Night from
-              - type: custom:button-card
-                template: fusion_range
-                entity: input_number.kiosk_brillo_dia
-                name: Day brightness
-              - type: custom:button-card
-                template: [fusion_tile, setting_popup]
-                entity: input_datetime.kiosk_dia_inicio
-                name: Day from
-              - type: custom:button-card
-                template: fusion_range
-                entity: input_number.kiosk_brillo_atenuado
-                name: Idle brightness
+                template: [fusion_tile, schedule_popup]
+                entity: input_text.kiosk_horarios
+                name: Brightness
+                variables:
+                  kind: kiosk
               - type: custom:button-card
                 template: [fusion_tile, setting_popup]
                 entity: input_number.kiosk_atenuar_min
                 name: Dim after
               - type: custom:button-card
-                template: fusion_range
-                entity: input_number.kiosk_brillo_atenuado_noche
-                name: Idle at night
-              - type: custom:button-card
                 template: [fusion_tile, setting_popup]
                 entity: input_number.kiosk_inactividad_min
                 name: Back to Overview
-              # Right column, under Back to Overview (0 = never)
               - type: custom:button-card
                 template: [fusion_tile, setting_popup]
                 entity: input_number.kiosk_apagar_min
                 name: Screen off after
                 state_display: |
-                  [[[ return Number(entity.state) ? `${entity.state} min` : 'Never'; ]]]
-                view_layout:
-                  grid-column: 2
+                  [[[ return Number(entity.state) ? `${Number(entity.state)} min` : 'Never'; ]]]
           - type: custom:button-card
             template: fusion_title_next
             name: Lights
@@ -2633,19 +2862,11 @@ views:
             layout: *tiles_layout
             cards:
               - type: custom:button-card
-                template: [fusion_tile, setting_popup]
-                entity: input_datetime.luces_atenuar_hora
-                name: Dim from
-              - type: custom:button-card
-                template: fusion_range
-                entity: input_number.luces_atenuar_brillo
-                name: Dim to
-                view_layout:
-                  grid-column: span 2
-              - type: custom:button-card
-                template: [fusion_tile, setting_popup]
-                entity: input_datetime.luces_apagar_hora
-                name: Off at
+                template: [fusion_tile, schedule_popup]
+                entity: input_text.luces_horarios
+                name: Light schedule
+                variables:
+                  kind: lights
               # Lights with the "Auto lights" label (the ones these automations control).
               - type: custom:button-card
                 template: fusion_tile

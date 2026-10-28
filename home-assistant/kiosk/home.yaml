@@ -2235,25 +2235,17 @@ views:
                 name: Bulb 3
           - type: custom:button-card
             template: desk_title_next
-            name: At night
+            name: Schedule
           - type: custom:layout-card
             layout_type: custom:grid-layout
             layout: *tiles_layout
             cards:
               - type: custom:button-card
-                template: [desk_tile, setting_popup]
-                entity: input_datetime.luces_atenuar_hora
-                name: Dim from
-              - type: custom:button-card
-                template: desk_range
-                entity: input_number.luces_atenuar_brillo
-                name: Dim to
-                view_layout:
-                  grid-column: span 2
-              - type: custom:button-card
-                template: [desk_tile, setting_popup]
-                entity: input_datetime.luces_apagar_hora
-                name: Off at
+                template: [desk_tile, schedule_popup]
+                entity: input_text.luces_horarios
+                name: Light schedule
+                variables:
+                  kind: lights
               # Lights with the "Auto lights" label (the ones these automations control).
               - type: custom:button-card
                 template: desk_tile
@@ -2321,25 +2313,11 @@ views:
             layout: *tiles_layout
             cards:
               - type: custom:button-card
-                template: [desk_tile, setting_popup]
-                entity: input_datetime.kiosk_noche_inicio
-                name: Night from
-              - type: custom:button-card
-                template: desk_range
-                entity: input_number.kiosk_brillo_noche
-                name: Night brightness
-                view_layout:
-                  grid-column: span 2
-              - type: custom:button-card
-                template: [desk_tile, setting_popup]
-                entity: input_datetime.kiosk_dia_inicio
-                name: Day from
-              - type: custom:button-card
-                template: desk_range
-                entity: input_number.kiosk_brillo_dia
-                name: Day brightness
-                view_layout:
-                  grid-column: span 2
+                template: [desk_tile, schedule_popup]
+                entity: input_text.kiosk_horarios
+                name: Brightness
+                variables:
+                  kind: kiosk
               - type: custom:button-card
                 template: [desk_tile, setting_popup]
                 entity: input_number.kiosk_inactividad_min
@@ -2349,7 +2327,7 @@ views:
                 entity: input_number.kiosk_apagar_min
                 name: Screen off after
                 state_display: |
-                  [[[ return Number(entity.state) ? `${entity.state} min` : 'Never'; ]]]
+                  [[[ return Number(entity.state) ? `${Number(entity.state)} min` : 'Never'; ]]]
               - type: custom:button-card
                 template: desk_slider
                 entity: light.touchkio_mrtn_hub_display
