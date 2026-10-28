@@ -146,8 +146,9 @@ button_card_templates:
           const down = `this._d=1;this._lv=-1;this._ls=Date.now();clearTimeout(this._t);` +
             `try{this.setPointerCapture(event.pointerId)}catch(e){}` + calc + paint;
           const move = `if(!this._d)return;` + calc + paint + live;
+          // paint already declares `root` (declaring it twice is a SyntaxError and the whole handler is dropped).
           const up = `if(!this._d)return;this._d=0;event.stopPropagation();` + calc + paint + send +
-            `const root=this.getRootNode();this._t=setTimeout(()=>{` + clear + `},5000);`;
+            `this._t=setTimeout(()=>{` + clear + `},5000);`;
           const cancel = `if(!this._d)return;this._d=0;const root=this.getRootNode();` +
             `this._t=setTimeout(()=>{` + clear + `},this._lv>0?5000:0);`;
           // Keep every event inside the track, or the card's own tap_action
