@@ -329,6 +329,14 @@ automation:
           {% set lim = states('input_number.kiosk_apagar_min') | int(0) %}
           {{ lim > 0 and m | is_number and m | int >= lim }}
         id: sin_uso
+      # Respaldo: si algo la prende cuando ya pasaron los minutos sin uso (el trigger de arriba
+      # dispara una sola vez, al cruzar el umbral), la apaga tras kiosk_apagar_min prendida.
+      - platform: state
+        entity_id: light.touchkio_mrtn_hub_display
+        to: "on"
+        for:
+          minutes: "{{ [states('input_number.kiosk_apagar_min') | int(0), 1] | max }}"
+        id: sin_uso_prendida
       - platform: template
         value_template: >-
           {% set m = states('sensor.touchkio_mrtn_hub_last_active') %}
@@ -340,9 +348,14 @@ automation:
       - choose:
           - conditions:
               - condition: trigger
-                id: sin_uso
+                id:
+                  - sin_uso
+                  - sin_uso_prendida
               - condition: template
-                value_template: "{{ is_state(pantalla, 'on') }}"
+                value_template: >-
+                  {% set m = states('sensor.touchkio_mrtn_hub_last_active') %}
+                  {% set lim = states('input_number.kiosk_apagar_min') | int(0) %}
+                  {{ is_state(pantalla, 'on') and lim > 0 and m | is_number and m | int >= lim }}
             sequence:
               # Atenuada: el brillo de antes de atenuar ya está guardado
               - if:
